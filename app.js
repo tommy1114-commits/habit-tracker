@@ -26,27 +26,12 @@
   // 預設常用閱讀/研讀書名標籤
   const DEFAULT_SUBJECTS = ['《原子習慣》', '《快思慢想》', '《被討厭的勇氣》', '專利法與審查基準', '民法總則', '科技新知與AI文章'];
 
-  // 試算表歷史備註彩蛋範例 (若為對應週次自動呈現)
-  const SAMPLE_DAILY_NOTES = {
-    // 範例：讓使用者打開時能看到熟悉的心情亮點
-    'default': {
-      0: '買聯合文學、逛逛書店',
-      1: '複習專利實務與工作流',
-      2: '閱讀《原子習慣》第3章',
-      3: 'AI 出題英文閱讀理解全對 🎉',
-      4: '跟朋友聚餐、路易莎喝咖啡',
-      5: '',
-      6: ''
-    }
-  };
-
   // =========================================================================
   // 2. 狀態管理 (App State & Storage Keys)
   // =========================================================================
   const STORAGE_KEYS = {
     HABITS: 'focushabit_habits_v1',
     CHECKINS: 'focushabit_checkins_v1',
-    DAILY_NOTES: 'focushabit_dailynotes_v1',
     SESSIONS: 'focushabit_sessions_v1',
     SUBJECTS: 'focushabit_subjects_v1',
     ACTIVE_TIMER: 'focushabit_activetimer_v1',
@@ -54,7 +39,6 @@
     GAS_URL: 'focushabit_gas_url_v1',
     LAST_SYNC: 'focushabit_last_sync_v1',
     CHECKINS_TIMESTAMPS: 'focushabit_checkins_timestamps_v1',
-    NOTES_TIMESTAMPS: 'focushabit_notes_timestamps_v1',
     DELETED_HABITS: 'focushabit_deleted_habits_v1'
   };
 
@@ -63,13 +47,11 @@
     currentView: 'board',   // 'board' | 'timer' | 'logs' | 'manage'
     habits: [],
     checkins: {},           // { [weekKey]: { [habitId]: [bool, bool, bool, bool, bool, bool, bool] } }
-    dailyNotes: {},         // { [weekKey]: { [dayIdx]: string } }
     sessions: [],           // array of { id, habitId, habitName, subject, notes, startTime, endTime, durationSeconds, dateStr, weekKey, dayOfWeek }
     recentSubjects: [],
     theme: 'light',
     expandedHabitIds: new Set(),
     checkinsTimestamps: {}, // { [`${weekKey}_${habitId}_${dayIdx}`]: number }
-    dailyNotesTimestamps: {}, // { [`${weekKey}_${dayIdx}`]: number }
     deletedHabitIds: new Set(), // Set of habit IDs deleted by user
     gasUrl: '',
     isSyncing: false,
@@ -158,9 +140,6 @@
       const storedCheckins = localStorage.getItem(STORAGE_KEYS.CHECKINS);
       state.checkins = storedCheckins ? JSON.parse(storedCheckins) : {};
 
-      const storedNotes = localStorage.getItem(STORAGE_KEYS.DAILY_NOTES);
-      state.dailyNotes = storedNotes ? JSON.parse(storedNotes) : {};
-
       const storedSessions = localStorage.getItem(STORAGE_KEYS.SESSIONS);
       state.sessions = storedSessions ? JSON.parse(storedSessions) : [];
 
@@ -175,9 +154,6 @@
 
       const storedCheckinsTimes = localStorage.getItem(STORAGE_KEYS.CHECKINS_TIMESTAMPS);
       state.checkinsTimestamps = storedCheckinsTimes ? JSON.parse(storedCheckinsTimes) : {};
-
-      const storedNotesTimes = localStorage.getItem(STORAGE_KEYS.NOTES_TIMESTAMPS);
-      state.dailyNotesTimestamps = storedNotesTimes ? JSON.parse(storedNotesTimes) : {};
 
       const storedDeleted = localStorage.getItem(STORAGE_KEYS.DELETED_HABITS);
       state.deletedHabitIds = storedDeleted ? new Set(JSON.parse(storedDeleted)) : new Set();
@@ -233,24 +209,6 @@
     if (!skipCloud) pushCloudDataNow();
   }
 
-  let notesDebounceTimer = null;
-  function saveDailyNotes(skipCloud = false, immediateCloud = false) {
-    localStorage.setItem(STORAGE_KEYS.DAILY_NOTES, JSON.stringify(state.dailyNotes));
-    if (state.dailyNotesTimestamps) {
-      localStorage.setItem(STORAGE_KEYS.NOTES_TIMESTAMPS, JSON.stringify(state.dailyNotesTimestamps));
-    }
-    if (!skipCloud) {
-      if (immediateCloud) {
-        if (notesDebounceTimer) clearTimeout(notesDebounceTimer);
-        pushCloudDataNow();
-      } else {
-        if (notesDebounceTimer) clearTimeout(notesDebounceTimer);
-        notesDebounceTimer = setTimeout(() => {
-          pushCloudDataNow();
-        }, 500);
-      }
-    }
-  }
 
   function saveSessions(skipCloud = false) {
     localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(state.sessions));
@@ -572,48 +530,7 @@
     }
   }
 
-  /**
-   * 渲染每日生活亮點隨筆 (Daily Notes Grid)
-   */
-  function renderDailyNotes() {
-    const gridEl = document.getElementById('dailyNotesGrid');
-    if (!gridEl) return;
 
-    gridEl.innerHTML = '';
-    const weekKey = formatDateKey(state.currentWeekStart);
-
-    // 確保本週有隨筆物件
-    if (!state.dailyNotes[weekKey]) {
-      // 若為第一週且無紀錄，載入預設友善範例
-      state.dailyNotes[weekKey] = SAMPLE_DAILY_NOTES[weekKey] || { 0: '', 1: '', 2: '', 3: '', 4: '', 5: '', 6: '' };
-    }
-
-    const dayNames = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-      const dayDate = new Date(state.currentWeekStart);
-      dayDate.setDate(state.currentWeekStart.getDate() + dayIdx);
-      const isToday = dayDate.getTime() === today.getTime();
-      const noteContent = state.dailyNotes[weekKey][dayIdx] || '';
-
-      const card = document.createElement('div');
-      card.className = `daily-note-card ${isToday ? 'is-today' : ''}`;
-      card.innerHTML = `
-        <div class="daily-note-header">
-          <span>${dayNames[dayIdx]} (${formatMonthDay(dayDate)})</span>
-          ${isToday ? '<span class="badge badge-primary">今日</span>' : ''}
-        </div>
-        <textarea 
-          class="daily-note-textarea" 
-          data-day="${dayIdx}"
-          placeholder="今天有什麼好事或特別收穫..."
-        >${escapeHtml(noteContent)}</textarea>
-      `;
-      gridEl.appendChild(card);
-    }
-  }
 
   /**
    * 渲染碼表介面與習慣下拉選單
@@ -1436,7 +1353,6 @@
       exportedAt: new Date().toISOString(),
       habits: state.habits,
       checkins: state.checkins,
-      dailyNotes: state.dailyNotes,
       sessions: state.sessions,
       recentSubjects: state.recentSubjects
     };
@@ -1460,18 +1376,15 @@
         if (data.habits && Array.isArray(data.habits)) {
           state.habits = data.habits;
           state.checkins = data.checkins || {};
-          state.dailyNotes = data.dailyNotes || {};
           state.sessions = data.sessions || [];
           state.recentSubjects = data.recentSubjects || DEFAULT_SUBJECTS;
 
           saveHabits();
           saveCheckins();
-          saveDailyNotes();
           saveSessions();
           saveRecentSubjects();
 
           renderHabitTable();
-          renderDailyNotes();
           renderTimerView();
           renderLogsView();
           renderManageView();
@@ -1552,34 +1465,6 @@
         gasStatusText.style.color = 'var(--danger)';
       }
       if (cloudIcon) cloudIcon.title = '雲端連線失敗，點此檢查網址';
-    }
-  }
-
-  /**
-   * 將畫面上正在編輯中的隨筆文字即時寫入 state 並儲存
-   */
-  function flushDailyNotesFromDOM(skipCloud = false) {
-    const notesGrid = document.getElementById('dailyNotesGrid');
-    if (!notesGrid) return;
-    const weekKey = formatDateKey(state.currentWeekStart);
-    if (!state.dailyNotes[weekKey]) state.dailyNotes[weekKey] = {};
-    if (!state.dailyNotesTimestamps) state.dailyNotesTimestamps = {};
-
-    const textareas = notesGrid.querySelectorAll('.daily-note-textarea');
-    let hasChanges = false;
-    textareas.forEach(textarea => {
-      const dayIdx = parseInt(textarea.dataset.day, 10);
-      if (!isNaN(dayIdx)) {
-        const val = textarea.value;
-        if (state.dailyNotes[weekKey][dayIdx] !== val) {
-          state.dailyNotes[weekKey][dayIdx] = val;
-          state.dailyNotesTimestamps[`${weekKey}_${dayIdx}`] = Date.now();
-          hasChanges = true;
-        }
-      }
-    });
-    if (hasChanges) {
-      saveDailyNotes(skipCloud, true);
     }
   }
 
@@ -1683,55 +1568,7 @@
     });
     state.sessions = Array.from(sessionMap.values()).sort((a, b) => b.startTime - a.startTime);
 
-    // 4. 合併 Daily Notes (每日生活亮點隨筆)：依單格時間戳合併，最新編輯絕對勝出，絕不遺失任何字句
-    const cloudNotes = cloudData.dailyNotes || {};
-    const cloudNotesTimestamps = cloudData.dailyNotesTimestamps || {};
-    const localNotesTimestamps = state.dailyNotesTimestamps || {};
-    const mergedNotes = {};
-    const mergedNotesTimestamps = Object.assign({}, cloudNotesTimestamps);
-
-    const allNotesWeeks = new Set([...Object.keys(cloudNotes), ...Object.keys(state.dailyNotes)]);
-    allNotesWeeks.forEach(wKey => {
-      mergedNotes[wKey] = {};
-      const cloudWeekNotes = cloudNotes[wKey] || {};
-      const localWeekNotes = state.dailyNotes[wKey] || {};
-
-      for (let d = 0; d < 7; d++) {
-        const localText = localWeekNotes[d] !== undefined ? String(localWeekNotes[d]) : '';
-        const cloudText = cloudWeekNotes[d] !== undefined ? String(cloudWeekNotes[d]) : '';
-        const cellKey = `${wKey}_${d}`;
-        const lTime = localNotesTimestamps[cellKey] || 0;
-        const cTime = cloudNotesTimestamps[cellKey] || 0;
-
-        if (localText.trim() && !cloudText.trim()) {
-          mergedNotes[wKey][d] = localText;
-          mergedNotesTimestamps[cellKey] = Math.max(lTime, 1);
-        } else if (cloudText.trim() && !localText.trim()) {
-          mergedNotes[wKey][d] = cloudText;
-          mergedNotesTimestamps[cellKey] = Math.max(cTime, 1);
-        } else if (localText.trim() && cloudText.trim()) {
-          if (localText.trim() === cloudText.trim()) {
-            mergedNotes[wKey][d] = cloudText;
-          } else {
-            // 兩者皆有字且不同內容：依據單格時間戳決定最新內容
-            if (lTime > cTime) {
-              mergedNotes[wKey][d] = localText;
-              mergedNotesTimestamps[cellKey] = lTime;
-            } else {
-              mergedNotes[wKey][d] = cloudText;
-              mergedNotesTimestamps[cellKey] = cTime;
-            }
-          }
-        } else {
-          mergedNotes[wKey][d] = '';
-        }
-      }
-    });
-    state.dailyNotes = mergedNotes;
-    state.dailyNotesTimestamps = mergedNotesTimestamps;
-    localStorage.setItem(STORAGE_KEYS.NOTES_TIMESTAMPS, JSON.stringify(state.dailyNotesTimestamps));
-
-    // 5. 合併書名與研讀標籤
+    // 4. 合併書名與研讀標籤
     const subjectsSet = new Set([...state.recentSubjects, ...(cloudData.recentSubjects || [])]);
     state.recentSubjects = Array.from(subjectsSet).slice(0, 15);
 
@@ -1740,7 +1577,6 @@
 
   async function fetchCloudData(silent = false) {
     if (!state.gasUrl || state.isSyncing) return false;
-    flushDailyNotesFromDOM(true);
     try {
       state.isSyncing = true;
       if (!silent) updateCloudSyncUI('正在同步中...', 'syncing');
@@ -1763,7 +1599,6 @@
 
       saveHabits(true);
       saveCheckins(true);
-      saveDailyNotes(true);
       saveSessions(true);
       saveRecentSubjects(true);
       localStorage.setItem(STORAGE_KEYS.LAST_SYNC, String(Date.now()));
@@ -1773,7 +1608,6 @@
 
       // 重新渲染畫面
       renderHabitTable();
-      renderDailyNotes();
       renderTimerView();
       renderLogsView();
       renderManageView();
@@ -1799,14 +1633,11 @@
       return;
     }
     isPushing = true;
-    flushDailyNotesFromDOM(true);
     try {
       const payload = {
         habits: state.habits,
         checkins: state.checkins,
         checkinsTimestamps: state.checkinsTimestamps || {},
-        dailyNotes: state.dailyNotes,
-        dailyNotesTimestamps: state.dailyNotesTimestamps || {},
         deletedHabitIds: Array.from(state.deletedHabitIds || []),
         sessions: state.sessions,
         recentSubjects: state.recentSubjects,
@@ -1892,12 +1723,6 @@
           }
         });
 
-        let dailyNotesDaysCount = 0;
-        if (state.dailyNotes && state.dailyNotes[weekKey]) {
-          dailyNotesDaysCount = Object.values(state.dailyNotes[weekKey])
-            .filter(txt => typeof txt === 'string' && txt.trim().length > 0).length;
-        }
-
         const totalSessionsCount = state.sessions.length;
 
         const resHabitsEl = document.getElementById('resHabitsCount');
@@ -1906,16 +1731,13 @@
         const resCheckinsEl = document.getElementById('resCheckinsCount');
         if (resCheckinsEl) resCheckinsEl.textContent = `${totalCheckinsThisWeek} 次`;
 
-        const resNotesEl = document.getElementById('resNotesCount');
-        if (resNotesEl) resNotesEl.textContent = `${dailyNotesDaysCount} 天`;
-
         const resSessionsEl = document.getElementById('resSessionsCount');
         if (resSessionsEl) resSessionsEl.textContent = `${totalSessionsCount} 筆`;
 
         const timeStr = formatClockTime(Date.now());
         const resMsgEl = document.getElementById('syncResultMsg');
         if (resMsgEl) {
-          resMsgEl.innerHTML = `手機與電腦的打卡進度、專注歷程與生活亮點已全數成功合併！<br><span style="font-size:0.85rem;color:var(--text-secondary);">（同步完成時間：${timeStr}）</span>`;
+          resMsgEl.innerHTML = `手機與電腦的打卡進度與專注歷程已全數成功合併！<br><span style="font-size:0.85rem;color:var(--text-secondary);">（同步完成時間：${timeStr}）</span>`;
         }
 
         openModal('syncResultModal');
@@ -1962,7 +1784,6 @@
     const data = {
       habits: state.habits,
       checkins: state.checkins,
-      dailyNotes: state.dailyNotes,
       sessions: state.sessions,
       recentSubjects: state.recentSubjects,
       exportedAt: Date.now()
@@ -1995,18 +1816,15 @@
       if (data && data.habits && Array.isArray(data.habits)) {
         state.habits = data.habits;
         state.checkins = data.checkins || {};
-        state.dailyNotes = data.dailyNotes || {};
         state.sessions = data.sessions || [];
         state.recentSubjects = data.recentSubjects || DEFAULT_SUBJECTS;
 
         saveHabits();
         saveCheckins();
-        saveDailyNotes();
         saveSessions();
         saveRecentSubjects();
 
         renderHabitTable();
-        renderDailyNotes();
         renderTimerView();
         renderLogsView();
         renderManageView();
@@ -2033,27 +1851,21 @@
 
     // 週次切換
     document.getElementById('prevWeekBtn').addEventListener('click', () => {
-      flushDailyNotesFromDOM();
       state.currentWeekStart.setDate(state.currentWeekStart.getDate() - 7);
       renderWeekNavigator();
       renderHabitTable();
-      renderDailyNotes();
     });
 
     document.getElementById('nextWeekBtn').addEventListener('click', () => {
-      flushDailyNotesFromDOM();
       state.currentWeekStart.setDate(state.currentWeekStart.getDate() + 7);
       renderWeekNavigator();
       renderHabitTable();
-      renderDailyNotes();
     });
 
     document.getElementById('todayBtn').addEventListener('click', () => {
-      flushDailyNotesFromDOM();
       state.currentWeekStart = getSundayOfWeek(new Date());
       renderWeekNavigator();
       renderHabitTable();
-      renderDailyNotes();
     });
 
     // 兩層式習慣看板事件委派 (今日快打、7天矩陣打卡、展開收合、碼表、編輯、休息)
@@ -2139,32 +1951,7 @@
       });
     }
 
-    // 每日隨筆輸入保存 (即時監聽 input、change、blur，確保打字每分每秒與離焦時皆即時保存)
-    const notesGrid = document.getElementById('dailyNotesGrid');
-    if (notesGrid) {
-      notesGrid.addEventListener('input', (e) => {
-        if (e.target.classList.contains('daily-note-textarea')) {
-          const dayIdx = parseInt(e.target.dataset.day, 10);
-          const weekKey = formatDateKey(state.currentWeekStart);
-          if (!state.dailyNotes[weekKey]) state.dailyNotes[weekKey] = {};
-          state.dailyNotes[weekKey][dayIdx] = e.target.value;
-          saveDailyNotes(); // 自動觸發 debouncedPushCloudData
-        }
-      });
 
-      notesGrid.addEventListener('change', (e) => {
-        if (e.target.classList.contains('daily-note-textarea')) {
-          flushDailyNotesFromDOM();
-          showToast('✓ 隨筆記事已自動即時儲存');
-        }
-      });
-
-      notesGrid.addEventListener('blur', (e) => {
-        if (e.target.classList.contains('daily-note-textarea')) {
-          flushDailyNotesFromDOM();
-        }
-      }, true);
-    }
 
     // 碼表控制按鈕
     document.getElementById('timerStartBtn').addEventListener('click', startTimer);
@@ -2245,14 +2032,10 @@
 
     // 跨裝置雲端同步視窗與互動按鈕
     function openSyncModal() {
-      flushDailyNotesFromDOM();
       const urlInput = document.getElementById('gasSyncUrlInput');
       if (urlInput) urlInput.value = state.gasUrl || '';
       openModal('syncModal');
     }
-
-    window.addEventListener('beforeunload', () => flushDailyNotesFromDOM(false));
-    window.addEventListener('pagehide', () => flushDailyNotesFromDOM(false));
 
     // 頂部常駐快速同步按鈕與設定按鈕
     const instantSyncBtn = document.getElementById('instantSyncBtn');
@@ -2343,7 +2126,6 @@
 
     renderWeekNavigator();
     renderHabitTable();
-    renderDailyNotes();
     renderTimerView();
     renderLogsView();
     renderManageView();

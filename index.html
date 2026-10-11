@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css?v=20261011_v5">
+  <link rel="stylesheet" href="style.css?v=20261011_v6">
   <!-- Google Fonts for modern typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -151,20 +151,6 @@
           <!-- 習慣卡片兩層式清單容器 -->
           <div class="habit-cards-accordion" id="habitCardsContainer">
             <!-- 動態注入習慣兩層式卡片 -->
-          </div>
-        </div>
-
-        <!-- 每日生活亮點隨筆區 (Daily Highlights，對應原試算表第58-59行的值得記錄事項) -->
-        <div class="daily-notes-section">
-          <div class="section-header">
-            <div class="section-title-wrap">
-              <span class="section-icon">📝</span>
-              <h3>每日生活亮點 & 值得記錄的事</h3>
-            </div>
-            <p class="section-desc">記錄每天精彩、有趣或值得紀念的小故事（點擊格內即可編輯，自動即時保存）</p>
-          </div>
-          <div class="daily-notes-grid" id="dailyNotesGrid">
-            <!-- 動態注入 7 天的每日小卡 -->
           </div>
         </div>
       </section>
@@ -674,7 +660,7 @@ function doPost(e) {
       </div>
       <div class="modal-body">
         <p id="syncResultMsg" class="modal-desc" style="font-size:0.95rem;line-height:1.6;color:var(--text-primary);margin-bottom:14px;">
-          手機與電腦的打卡進度、專注歷程與生活亮點已全數成功合併！
+          手機與電腦的打卡進度與專注歷程已全數成功合併！
         </p>
         <div class="sync-details-box" id="syncResultDetails">
           <div class="sync-stat-item">
@@ -684,10 +670,6 @@ function doPost(e) {
           <div class="sync-stat-item">
             <span class="sync-stat-label">本週打卡完成</span>
             <span class="sync-stat-val" id="resCheckinsCount">0 次</span>
-          </div>
-          <div class="sync-stat-item">
-            <span class="sync-stat-label">生活亮點隨筆</span>
-            <span class="sync-stat-val" id="resNotesCount">0 天</span>
           </div>
           <div class="sync-stat-item">
             <span class="sync-stat-label">專注計時紀錄</span>
@@ -730,6 +712,6 @@ function doPost(e) {
   </script>
 
   <!-- 載入應用程式核心 JS (加入版本號強制作廢瀏覽器快取) -->
-  <script src="app.js?v=20261011_v5"></script>
+  <script src="app.js?v=20261011_v6"></script>
 </body>
 </html>
