@@ -310,11 +310,6 @@
     saturday.setDate(sunday.getDate() + 6);
     const weekRangeText = `${formatMonthDay(sunday)} (週日) ~ ${formatMonthDay(saturday)} (週六)`;
 
-    // 預設第一次若無任何展開，展開第一個習慣以便初次檢視
-    if (state.expandedHabitIds.size === 0 && activeHabits.length > 0) {
-      state.expandedHabitIds.add(activeHabits[0].id);
-    }
-
     if (countBadge) {
       countBadge.textContent = `共 ${activeHabits.length} 個進行中習慣`;
     }
@@ -1470,6 +1465,76 @@
     }
   }
 
+  /**
+   * 智慧雙向資料無損合併 (確保手機現有打卡與計時紀錄 100% 完整保留，絕不遺失)
+   */
+  function mergeStateWithCloud(cloudData) {
+    if (!cloudData || cloudData.empty) return false;
+
+    // 1. 合併 Habits：保留雙方所有新增/自訂的習慣
+    const habitMap = new Map();
+    if (Array.isArray(cloudData.habits)) {
+      cloudData.habits.forEach(h => habitMap.set(h.id, h));
+    }
+    state.habits.forEach(h => {
+      habitMap.set(h.id, Object.assign({}, habitMap.get(h.id) || {}, h));
+    });
+    state.habits = Array.from(habitMap.values());
+
+    // 2. 合併 Checkins (打卡格)：取 OR 運算，手機或電腦只要有一邊打卡過，即視為已打卡！
+    const mergedCheckins = Object.assign({}, cloudData.checkins || {});
+    Object.keys(state.checkins).forEach(weekKey => {
+      if (!mergedCheckins[weekKey]) {
+        mergedCheckins[weekKey] = state.checkins[weekKey];
+      } else {
+        const localWeek = state.checkins[weekKey];
+        Object.keys(localWeek).forEach(habitId => {
+          if (!mergedCheckins[weekKey][habitId]) {
+            mergedCheckins[weekKey][habitId] = localWeek[habitId];
+          } else {
+            const cloudDays = mergedCheckins[weekKey][habitId];
+            const localDays = localWeek[habitId];
+            const combined = [];
+            for (let i = 0; i < 7; i++) {
+              combined[i] = Boolean(cloudDays[i] || localDays[i]);
+            }
+            mergedCheckins[weekKey][habitId] = combined;
+          }
+        });
+      }
+    });
+    state.checkins = mergedCheckins;
+
+    // 3. 合併 Sessions (閱讀計時紀錄)：依 id 去重，雙方計時結算 100% 完整疊加保存
+    const sessionMap = new Map();
+    if (Array.isArray(cloudData.sessions)) {
+      cloudData.sessions.forEach(s => sessionMap.set(s.id, s));
+    }
+    state.sessions.forEach(s => sessionMap.set(s.id, s));
+    state.sessions = Array.from(sessionMap.values()).sort((a, b) => b.startTime - a.startTime);
+
+    // 4. 合併 Daily Notes (每日生活亮點隨筆)
+    const mergedNotes = Object.assign({}, cloudData.dailyNotes || {});
+    Object.keys(state.dailyNotes).forEach(weekKey => {
+      if (!mergedNotes[weekKey]) {
+        mergedNotes[weekKey] = state.dailyNotes[weekKey];
+      } else {
+        for (let d = 0; d < 7; d++) {
+          if (state.dailyNotes[weekKey][d]) {
+            mergedNotes[weekKey][d] = state.dailyNotes[weekKey][d];
+          }
+        }
+      }
+    });
+    state.dailyNotes = mergedNotes;
+
+    // 5. 合併書名與研讀標籤
+    const subjectsSet = new Set([...state.recentSubjects, ...(cloudData.recentSubjects || [])]);
+    state.recentSubjects = Array.from(subjectsSet).slice(0, 15);
+
+    return true;
+  }
+
   async function fetchCloudData(silent = false) {
     if (!state.gasUrl) return;
     try {
@@ -1480,36 +1545,40 @@
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
 
       const data = await resp.json();
-      if (data && data.habits && Array.isArray(data.habits) && !data.empty) {
-        state.habits = data.habits;
-        state.checkins = data.checkins || {};
-        state.dailyNotes = data.dailyNotes || {};
-        state.sessions = data.sessions || [];
-        state.recentSubjects = data.recentSubjects || DEFAULT_SUBJECTS;
-
-        saveHabits(true);
-        saveCheckins(true);
-        saveDailyNotes(true);
-        saveSessions(true);
-        saveRecentSubjects(true);
-        localStorage.setItem(STORAGE_KEYS.LAST_SYNC, String(Date.now()));
-
-        renderHabitTable();
-        renderDailyNotes();
-        renderTimerView();
-        renderLogsView();
-        renderManageView();
-
-        const timeStr = formatClockTime(Date.now());
-        updateCloudSyncUI(`🟢 雲端已同步 (${timeStr})`, true);
-        if (!silent) showToast(`✅ 雲端資料同步完成 (${timeStr})！`);
-      } else {
-        updateCloudSyncUI('🟢 雲端已連線 (尚未有紀錄)', true);
+      if (!data || data.empty || !Array.isArray(data.habits)) {
+        // 雲端尚無紀錄：自動將手機本機現有紀錄上傳至雲端
+        await pushCloudData(silent);
+        updateCloudSyncUI('🟢 已備份本機紀錄至雲端', true);
+        if (!silent) showToast('☁️ 已成功將手機現有紀錄備份至雲端！');
+        return;
       }
+
+      // 雲端已有紀錄：執行無損智能合併 (手機現有打卡與歷程全部保留)
+      mergeStateWithCloud(data);
+
+      saveHabits(true);
+      saveCheckins(true);
+      saveDailyNotes(true);
+      saveSessions(true);
+      saveRecentSubjects(true);
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC, String(Date.now()));
+
+      // 將合併後的完整最新資料推回雲端，確保雲端也是雙向合併後的最新狀態
+      await pushCloudData(true);
+
+      renderHabitTable();
+      renderDailyNotes();
+      renderTimerView();
+      renderLogsView();
+      renderManageView();
+
+      const timeStr = formatClockTime(Date.now());
+      updateCloudSyncUI(`🟢 雲端已同步 (${timeStr})`, true);
+      if (!silent) showToast(`🎉 雙向同步成功 (${timeStr})！手機紀錄已完整保留並與雲端合併`);
     } catch (err) {
       console.warn('Cloud sync pull failed:', err);
       updateCloudSyncUI('⚠️ 同步失敗 (已保留本機紀錄)', false);
-      if (!silent) showToast('⚠️ 雲端讀取失敗，請確認網址正確或本機網路連線');
+      if (!silent) showToast('⚠️ 雲端讀取失敗，本機紀錄未受影響');
     } finally {
       state.isSyncing = false;
     }
@@ -1567,49 +1636,8 @@
     localStorage.setItem(STORAGE_KEYS.GAS_URL, url);
     updateCloudSyncUI('🔄 正在連線同步中...', true);
 
-    try {
-      // 嘗試讀取雲端既有資料
-      const resp = await fetch(`${state.gasUrl}?action=getData&_t=${Date.now()}`);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const data = await resp.json();
-
-      // 若雲端已有紀錄，且本機無自訂計時紀錄，則以雲端為主
-      const localHasSessions = state.sessions && state.sessions.length > 0;
-      if (data && data.habits && Array.isArray(data.habits) && !data.empty && (!localHasSessions || data.sessions?.length > 0)) {
-        state.habits = data.habits;
-        state.checkins = data.checkins || {};
-        state.dailyNotes = data.dailyNotes || {};
-        state.sessions = data.sessions || [];
-        state.recentSubjects = data.recentSubjects || DEFAULT_SUBJECTS;
-
-        saveHabits(true);
-        saveCheckins(true);
-        saveDailyNotes(true);
-        saveSessions(true);
-        saveRecentSubjects(true);
-
-        renderHabitTable();
-        renderDailyNotes();
-        renderTimerView();
-        renderLogsView();
-        renderManageView();
-
-        const timeStr = formatClockTime(Date.now());
-        updateCloudSyncUI(`🟢 雲端已同步 (${timeStr})`, true);
-        showToast(`🎉 成功同步雲端紀錄 (${timeStr})！`);
-      } else {
-        // 雲端尚無紀錄或本機有較多紀錄，上傳本機資料至雲端
-        await pushCloudData(false);
-      }
-    } catch (err) {
-      console.warn('Initial sync error, trying push fallback:', err);
-      try {
-        await pushCloudData(false);
-      } catch (pushErr) {
-        updateCloudSyncUI('⚠️ 連線失敗', false);
-        showToast('⚠️ 連線失敗，請檢查網址與 Google 權限是否設為「所有人」');
-      }
-    }
+    // 直接呼叫無損雙向合併同步
+    await fetchCloudData(false);
   }
 
   function generateSyncCode() {
