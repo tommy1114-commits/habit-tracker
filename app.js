@@ -1466,6 +1466,31 @@
   }
 
   /**
+   * 將畫面上正在編輯中的隨筆文字即時寫入 state 並儲存
+   */
+  function flushDailyNotesFromDOM() {
+    const notesGrid = document.getElementById('dailyNotesGrid');
+    if (!notesGrid) return;
+    const weekKey = formatDateKey(state.currentWeekStart);
+    if (!state.dailyNotes[weekKey]) state.dailyNotes[weekKey] = {};
+    const textareas = notesGrid.querySelectorAll('.daily-note-textarea');
+    let hasChanges = false;
+    textareas.forEach(textarea => {
+      const dayIdx = parseInt(textarea.dataset.day, 10);
+      if (!isNaN(dayIdx)) {
+        const val = textarea.value;
+        if (state.dailyNotes[weekKey][dayIdx] !== val) {
+          state.dailyNotes[weekKey][dayIdx] = val;
+          hasChanges = true;
+        }
+      }
+    });
+    if (hasChanges) {
+      saveDailyNotes(false);
+    }
+  }
+
+  /**
    * 智慧雙向資料無損合併 (確保手機現有打卡與計時紀錄 100% 完整保留，絕不遺失)
    */
   function mergeStateWithCloud(cloudData) {
@@ -1514,14 +1539,28 @@
     state.sessions = Array.from(sessionMap.values()).sort((a, b) => b.startTime - a.startTime);
 
     // 4. 合併 Daily Notes (每日生活亮點隨筆)
-    const mergedNotes = Object.assign({}, cloudData.dailyNotes || {});
-    Object.keys(state.dailyNotes).forEach(weekKey => {
-      if (!mergedNotes[weekKey]) {
-        mergedNotes[weekKey] = state.dailyNotes[weekKey];
+    const mergedNotes = {};
+    if (cloudData.dailyNotes && typeof cloudData.dailyNotes === 'object') {
+      Object.keys(cloudData.dailyNotes).forEach(wKey => {
+        mergedNotes[wKey] = Object.assign({}, cloudData.dailyNotes[wKey]);
+      });
+    }
+
+    Object.keys(state.dailyNotes).forEach(wKey => {
+      if (!mergedNotes[wKey]) {
+        mergedNotes[wKey] = Object.assign({}, state.dailyNotes[wKey]);
       } else {
+        const localDayNotes = state.dailyNotes[wKey] || {};
         for (let d = 0; d < 7; d++) {
-          if (state.dailyNotes[weekKey][d]) {
-            mergedNotes[weekKey][d] = state.dailyNotes[weekKey][d];
+          const localText = (localDayNotes[d] || '').trim();
+          const cloudText = (mergedNotes[wKey][d] || '').trim();
+          if (localText && !cloudText) {
+            mergedNotes[wKey][d] = localDayNotes[d];
+          } else if (cloudText && !localText) {
+            mergedNotes[wKey][d] = mergedNotes[wKey][d];
+          } else if (localText && cloudText) {
+            // 兩者皆有字，保留字數較長或本機內容
+            mergedNotes[wKey][d] = localText.length >= cloudText.length ? localDayNotes[d] : mergedNotes[wKey][d];
           }
         }
       }
@@ -1537,6 +1576,7 @@
 
   async function fetchCloudData(silent = false) {
     if (!state.gasUrl) return;
+    flushDailyNotesFromDOM();
     try {
       state.isSyncing = true;
       if (!silent) updateCloudSyncUI('🔄 正在同步中...', true);
@@ -1586,6 +1626,7 @@
 
   async function pushCloudData(silent = true) {
     if (!state.gasUrl) return;
+    flushDailyNotesFromDOM();
     try {
       const payload = {
         habits: state.habits,
@@ -1715,6 +1756,7 @@
 
     // 週次切換
     document.getElementById('prevWeekBtn').addEventListener('click', () => {
+      flushDailyNotesFromDOM();
       state.currentWeekStart.setDate(state.currentWeekStart.getDate() - 7);
       renderWeekNavigator();
       renderHabitTable();
@@ -1722,6 +1764,7 @@
     });
 
     document.getElementById('nextWeekBtn').addEventListener('click', () => {
+      flushDailyNotesFromDOM();
       state.currentWeekStart.setDate(state.currentWeekStart.getDate() + 7);
       renderWeekNavigator();
       renderHabitTable();
@@ -1729,6 +1772,7 @@
     });
 
     document.getElementById('todayBtn').addEventListener('click', () => {
+      flushDailyNotesFromDOM();
       state.currentWeekStart = getSundayOfWeek(new Date());
       renderWeekNavigator();
       renderHabitTable();
@@ -1818,19 +1862,31 @@
       });
     }
 
-    // 每日隨筆輸入保存 (委派監聽 change / blur)
+    // 每日隨筆輸入保存 (即時監聽 input、change、blur，確保打字每分每秒與離焦時皆即時保存)
     const notesGrid = document.getElementById('dailyNotesGrid');
     if (notesGrid) {
-      notesGrid.addEventListener('change', (e) => {
+      notesGrid.addEventListener('input', (e) => {
         if (e.target.classList.contains('daily-note-textarea')) {
           const dayIdx = parseInt(e.target.dataset.day, 10);
           const weekKey = formatDateKey(state.currentWeekStart);
           if (!state.dailyNotes[weekKey]) state.dailyNotes[weekKey] = {};
-          state.dailyNotes[weekKey][dayIdx] = e.target.value.trim();
-          saveDailyNotes();
+          state.dailyNotes[weekKey][dayIdx] = e.target.value;
+          saveDailyNotes(); // 自動觸發 debouncedPushCloudData
+        }
+      });
+
+      notesGrid.addEventListener('change', (e) => {
+        if (e.target.classList.contains('daily-note-textarea')) {
+          flushDailyNotesFromDOM();
           showToast('✓ 隨筆記事已自動即時儲存');
         }
       });
+
+      notesGrid.addEventListener('blur', (e) => {
+        if (e.target.classList.contains('daily-note-textarea')) {
+          flushDailyNotesFromDOM();
+        }
+      }, true);
     }
 
     // 碼表控制按鈕
@@ -1912,10 +1968,14 @@
 
     // 跨裝置雲端同步視窗與互動按鈕
     function openSyncModal() {
+      flushDailyNotesFromDOM();
       const urlInput = document.getElementById('gasSyncUrlInput');
       if (urlInput) urlInput.value = state.gasUrl || '';
       openModal('syncModal');
     }
+
+    window.addEventListener('beforeunload', flushDailyNotesFromDOM);
+    window.addEventListener('pagehide', flushDailyNotesFromDOM);
 
     const cloudSyncBtn = document.getElementById('cloudSyncBtn');
     if (cloudSyncBtn) cloudSyncBtn.addEventListener('click', openSyncModal);
