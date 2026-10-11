@@ -63,11 +63,14 @@
         <button id="themeToggleBtn" class="icon-btn" title="切換深淺色主題" aria-label="Toggle Theme">
           <span id="themeIcon">🌙</span>
         </button>
-        <button id="backupModalBtn" class="icon-btn" title="資料備份與還原" aria-label="Backup & Restore">
-          <span>💾</span>
+        <button id="backupModalBtn" class="icon-btn" title="資料備份與匯出入（平時所有紀錄皆為自動即時儲存）" aria-label="Backup & Restore">
+          <span>📦</span>
+        </button>
+        <button id="cloudSyncBtn" class="icon-btn" title="跨裝置雲端同步 (手機/電腦同步)" aria-label="Cloud Sync">
+          <span id="cloudIcon">☁️</span>
         </button>
         <button id="addHabitBtn" class="btn btn-primary btn-sm">
-          <span>➕</span> 新增習慣
+          <span>➕</span> <span class="add-btn-label">新增習慣</span>
         </button>
       </div>
     </header>
@@ -120,6 +123,7 @@
               <span class="board-hint-text">💡 點擊項目展開查看當週 7 天打卡陣列（免左右滑動）</span>
             </div>
             <div class="board-controls-right">
+              <button id="boardSyncShortcutBtn" class="btn btn-sm btn-outline" title="設定跨裝置雲端同步 (手機/電腦同步)">☁️ 雲端同步</button>
               <button id="expandAllBtn" class="btn btn-sm btn-outline" title="展開所有習慣的 7 天打卡格">展開全部</button>
               <button id="collapseAllBtn" class="btn btn-sm btn-outline" title="收合成簡潔清單">收合全部</button>
             </div>
@@ -272,9 +276,14 @@
             <h2>⚙️ 習慣清單與目標管理</h2>
             <p>自由自訂、新增、修改每週目標，或將習慣設為暫時休息</p>
           </div>
-          <button id="manageAddBtn" class="btn btn-primary">
-            <span>➕</span> 新增自訂習慣
-          </button>
+          <div style="display:flex;gap:8px;">
+            <button id="manageSyncBtn" class="btn btn-outline">
+              <span>☁️</span> 跨裝置同步
+            </button>
+            <button id="manageAddBtn" class="btn btn-primary">
+              <span>➕</span> 新增自訂習慣
+            </button>
+          </div>
         </div>
 
         <div class="manage-grid">
@@ -449,6 +458,12 @@
         </p>
 
         <div class="backup-action-grid">
+          <div class="backup-action-card" style="border-color:var(--primary);background:var(--primary-subtle);">
+            <h4>☁️ 跨裝置雲端即時同步 (手機/電腦同步)</h4>
+            <p>透過免費 Google 雲端實現手機與電腦自動即時雙向同步，免手動匯出入。</p>
+            <button id="openSyncFromBackupBtn" class="btn btn-primary btn-sm">開啟跨裝置同步設定</button>
+          </div>
+
           <div class="backup-action-card">
             <h4>📥 匯出資料備份</h4>
             <p>將習慣清單、打卡歷史與計時紀錄下載為 JSON 檔案。</p>
@@ -478,6 +493,105 @@
             <li>數分鐘後即可獲得專屬網址，手機與電腦隨時打卡！詳細步驟請見 <code>README.md</code>。</li>
           </ol>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 跨裝置雲端同步對話窗 (手機與電腦即時同步) -->
+  <div id="syncModal" class="modal-overlay hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon">☁️</span>
+          <h3>跨裝置雲端同步設定 (手機與電腦同步)</h3>
+        </div>
+        <button class="modal-close-btn" data-close="syncModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="sync-intro-banner">
+          <p>
+            <strong>💡 為什麼電腦和手機的紀錄一開始沒有同步？</strong><br>
+            瀏覽器出於隱私安全考量，資料預設各自保存在個別手機與電腦中。若要跨裝置自動同步，只需透過免費的 <strong>Google 雲端同步</strong>，在手機與電腦填入相同網址，打卡或看書計時就會<strong>即時自動雙向同步</strong>！
+          </p>
+        </div>
+
+        <!-- 方案 A: Google 個人雲端即時同步 -->
+        <div class="sync-card active-card">
+          <div class="sync-card-header">
+            <h4>🌟 方案 A：Google 個人免費雲端同步 (最推薦 · 永久即時雙向同步)</h4>
+            <span class="badge badge-success">推薦</span>
+          </div>
+          <p class="sync-card-desc">
+            資料直接存放在您個人 Google 帳號中，完全免費且安全無隱私疑慮。只要將部屬好的 Google 雲端網址貼在下方，手機與電腦填入同一個網址即可！
+          </p>
+
+          <form id="gasSyncForm">
+            <div class="form-group">
+              <label for="gasSyncUrlInput">Google Apps Script 同步網址：</label>
+              <input type="url" id="gasSyncUrlInput" class="form-control" placeholder="https://script.google.com/macros/s/.../exec" />
+            </div>
+            <div class="sync-buttons-row">
+              <button type="submit" class="btn btn-primary" id="saveGasUrlBtn">💾 儲存並立即同步</button>
+              <button type="button" class="btn btn-outline" id="manualSyncBtn">🔄 立即雙向同步</button>
+              <span id="gasSyncStatusText" class="sync-status-msg"></span>
+            </div>
+          </form>
+
+          <!-- 展開摺疊的 GAS 快速指引 -->
+          <details class="gas-guide-details" open>
+            <summary>👉 點此查看：如何 1 分鐘免費取得您的 Google 同步網址？</summary>
+            <div class="gas-guide-content">
+              <ol>
+                <li>前往 <a href="https://script.google.com/home/start" target="_blank" rel="noopener">Google Apps Script (點此開啟)</a>，點擊左上角「<strong>新專案</strong>」。</li>
+                <li>刪除原本編輯區的所有內容，複製並貼上下方的 18 行同步代碼：
+                  <div class="code-box-wrapper">
+                    <pre><code id="gasScriptSnippet">function doGet(e) {
+  var props = PropertiesService.getUserProperties();
+  var data = props.getProperty('habit_tracker_data');
+  return ContentService.createTextOutput(data || '{}')
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var props = PropertiesService.getUserProperties();
+  props.setProperty('habit_tracker_data', e.postData.contents);
+  return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}</code></pre>
+                    <button type="button" class="btn btn-sm btn-outline copy-code-btn" id="copyGasCodeBtn">📋 一鍵複製代碼</button>
+                  </div>
+                </li>
+                <li>點擊右上角「<strong>部署 ➔ 新增部署</strong>」：
+                  <ul>
+                    <li>齒輪圖示選取類型選擇「<strong>網頁應用程式 (Web app)</strong>」</li>
+                    <li>執行身分選「<strong>我</strong>」</li>
+                    <li>誰可以存取選「<strong>所有人 (Anyone)</strong>」</li>
+                  </ul>
+                </li>
+                <li>點擊「<strong>部署</strong>」，複製產生的「<strong>網頁應用程式網址</strong>」(結尾為 <code>/exec</code>)。</li>
+                <li>將該網址貼到上面的輸入框中，手機和電腦都貼這同一個網址，就大功告成！</li>
+              </ol>
+            </div>
+          </details>
+        </div>
+
+        <!-- 方案 B: 一鍵代碼快速移轉 -->
+        <div class="sync-card">
+          <div class="sync-card-header">
+            <h4>📲 方案 B：一鍵同步代碼移轉 (免設定 · 立即把電腦資料複製到手機)</h4>
+          </div>
+          <p class="sync-card-desc">
+            若暫時不想設定 Google，可直接在電腦上「產生並複製同步代碼」，透過 LINE 傳給手機，在手機打開此處貼上，即可一鍵將打卡與看書紀錄移轉過去！
+          </p>
+          <div class="quick-code-box">
+            <button type="button" class="btn btn-outline" id="generateSyncCodeBtn">📋 產生並複製目前資料同步代碼</button>
+            <div class="form-group" style="margin-top:10px;">
+              <textarea id="importSyncCodeInput" class="form-control" rows="2" placeholder="在手機貼上同步代碼以匯入..."></textarea>
+            </div>
+            <button type="button" class="btn btn-sm btn-success" id="applySyncCodeBtn">📥 匯入代碼並還原資料</button>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>

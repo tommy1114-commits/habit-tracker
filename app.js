@@ -50,7 +50,9 @@
     SESSIONS: 'focushabit_sessions_v1',
     SUBJECTS: 'focushabit_subjects_v1',
     ACTIVE_TIMER: 'focushabit_activetimer_v1',
-    THEME: 'focushabit_theme_v1'
+    THEME: 'focushabit_theme_v1',
+    GAS_URL: 'focushabit_gas_url_v1',
+    LAST_SYNC: 'focushabit_last_sync_v1'
   };
 
   const state = {
@@ -63,6 +65,8 @@
     recentSubjects: [],
     theme: 'light',
     expandedHabitIds: new Set(),
+    gasUrl: '',
+    isSyncing: false,
     timer: {
       isRunning: false,
       isPaused: false,
@@ -156,6 +160,9 @@
       const storedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
       state.theme = storedTheme || 'light';
 
+      const storedGasUrl = localStorage.getItem(STORAGE_KEYS.GAS_URL);
+      state.gasUrl = storedGasUrl || '';
+
       // 檢查是否有進行中的背景計時器
       const storedTimer = localStorage.getItem(STORAGE_KEYS.ACTIVE_TIMER);
       if (storedTimer) {
@@ -178,24 +185,38 @@
     state.currentWeekStart = getSundayOfWeek(new Date());
   }
 
-  function saveHabits() {
+  let pushTimer = null;
+  function debouncedPushCloudData() {
+    if (!state.gasUrl || state.isSyncing) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => {
+      pushCloudData(true);
+    }, 1200);
+  }
+
+  function saveHabits(skipCloud = false) {
     localStorage.setItem(STORAGE_KEYS.HABITS, JSON.stringify(state.habits));
+    if (!skipCloud) debouncedPushCloudData();
   }
 
-  function saveCheckins() {
+  function saveCheckins(skipCloud = false) {
     localStorage.setItem(STORAGE_KEYS.CHECKINS, JSON.stringify(state.checkins));
+    if (!skipCloud) debouncedPushCloudData();
   }
 
-  function saveDailyNotes() {
+  function saveDailyNotes(skipCloud = false) {
     localStorage.setItem(STORAGE_KEYS.DAILY_NOTES, JSON.stringify(state.dailyNotes));
+    if (!skipCloud) debouncedPushCloudData();
   }
 
-  function saveSessions() {
+  function saveSessions(skipCloud = false) {
     localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(state.sessions));
+    if (!skipCloud) debouncedPushCloudData();
   }
 
-  function saveRecentSubjects() {
+  function saveRecentSubjects(skipCloud = false) {
     localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(state.recentSubjects));
+    if (!skipCloud) debouncedPushCloudData();
   }
 
   function saveActiveTimer() {
@@ -1434,6 +1455,227 @@
   }
 
   // =========================================================================
+  // 9.5 跨裝置雲端同步 (Google Apps Script & Quick Sync Code)
+  // =========================================================================
+
+  function updateCloudSyncUI(msg, isSuccess) {
+    const statusEl = document.getElementById('gasSyncStatusText');
+    const cloudIcon = document.getElementById('cloudIcon');
+    if (statusEl) {
+      statusEl.textContent = msg;
+      statusEl.style.color = isSuccess ? 'var(--success)' : 'var(--danger)';
+    }
+    if (cloudIcon) {
+      cloudIcon.title = state.gasUrl ? `已啟用雲端同步 (${msg})` : '點擊設定跨裝置雲端同步';
+    }
+  }
+
+  async function fetchCloudData(silent = false) {
+    if (!state.gasUrl) return;
+    try {
+      state.isSyncing = true;
+      if (!silent) updateCloudSyncUI('🔄 正在同步中...', true);
+
+      const resp = await fetch(`${state.gasUrl}?action=getData&_t=${Date.now()}`);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      const data = await resp.json();
+      if (data && data.habits && Array.isArray(data.habits) && !data.empty) {
+        state.habits = data.habits;
+        state.checkins = data.checkins || {};
+        state.dailyNotes = data.dailyNotes || {};
+        state.sessions = data.sessions || [];
+        state.recentSubjects = data.recentSubjects || DEFAULT_SUBJECTS;
+
+        saveHabits(true);
+        saveCheckins(true);
+        saveDailyNotes(true);
+        saveSessions(true);
+        saveRecentSubjects(true);
+        localStorage.setItem(STORAGE_KEYS.LAST_SYNC, String(Date.now()));
+
+        renderHabitTable();
+        renderDailyNotes();
+        renderTimerView();
+        renderLogsView();
+        renderManageView();
+
+        const timeStr = formatClockTime(Date.now());
+        updateCloudSyncUI(`🟢 雲端已同步 (${timeStr})`, true);
+        if (!silent) showToast(`✅ 雲端資料同步完成 (${timeStr})！`);
+      } else {
+        updateCloudSyncUI('🟢 雲端已連線 (尚未有紀錄)', true);
+      }
+    } catch (err) {
+      console.warn('Cloud sync pull failed:', err);
+      updateCloudSyncUI('⚠️ 同步失敗 (已保留本機紀錄)', false);
+      if (!silent) showToast('⚠️ 雲端讀取失敗，請確認網址正確或本機網路連線');
+    } finally {
+      state.isSyncing = false;
+    }
+  }
+
+  async function pushCloudData(silent = true) {
+    if (!state.gasUrl) return;
+    try {
+      const payload = {
+        habits: state.habits,
+        checkins: state.checkins,
+        dailyNotes: state.dailyNotes,
+        sessions: state.sessions,
+        recentSubjects: state.recentSubjects,
+        version: '1.0',
+        updatedAt: Date.now()
+      };
+
+      const resp = await fetch(state.gasUrl, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC, String(Date.now()));
+      const timeStr = formatClockTime(Date.now());
+      updateCloudSyncUI(`🟢 雲端已同步 (${timeStr})`, true);
+      if (!silent) showToast(`☁️ 已成功上傳備份至雲端 (${timeStr})！`);
+    } catch (err) {
+      console.warn('Cloud sync push failed:', err);
+      updateCloudSyncUI('⚠️ 上傳失敗', false);
+      if (!silent) showToast('⚠️ 雲端上傳失敗，已保留在本機');
+    }
+  }
+
+  async function handleGasSyncSave(e) {
+    if (e) e.preventDefault();
+    const urlInput = document.getElementById('gasSyncUrlInput');
+    const url = urlInput ? urlInput.value.trim() : '';
+
+    if (!url) {
+      state.gasUrl = '';
+      localStorage.removeItem(STORAGE_KEYS.GAS_URL);
+      updateCloudSyncUI('未設定同步網址', false);
+      showToast('⚠️ 已清除雲端同步網址');
+      return;
+    }
+
+    if (!url.startsWith('https://script.google.com/')) {
+      alert('請確認輸入的是正確的 Google 網頁應用程式網址 (開頭為 https://script.google.com/)');
+      return;
+    }
+
+    state.gasUrl = url;
+    localStorage.setItem(STORAGE_KEYS.GAS_URL, url);
+    updateCloudSyncUI('🔄 正在連線同步中...', true);
+
+    try {
+      // 嘗試讀取雲端既有資料
+      const resp = await fetch(`${state.gasUrl}?action=getData&_t=${Date.now()}`);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+
+      // 若雲端已有紀錄，且本機無自訂計時紀錄，則以雲端為主
+      const localHasSessions = state.sessions && state.sessions.length > 0;
+      if (data && data.habits && Array.isArray(data.habits) && !data.empty && (!localHasSessions || data.sessions?.length > 0)) {
+        state.habits = data.habits;
+        state.checkins = data.checkins || {};
+        state.dailyNotes = data.dailyNotes || {};
+        state.sessions = data.sessions || [];
+        state.recentSubjects = data.recentSubjects || DEFAULT_SUBJECTS;
+
+        saveHabits(true);
+        saveCheckins(true);
+        saveDailyNotes(true);
+        saveSessions(true);
+        saveRecentSubjects(true);
+
+        renderHabitTable();
+        renderDailyNotes();
+        renderTimerView();
+        renderLogsView();
+        renderManageView();
+
+        const timeStr = formatClockTime(Date.now());
+        updateCloudSyncUI(`🟢 雲端已同步 (${timeStr})`, true);
+        showToast(`🎉 成功同步雲端紀錄 (${timeStr})！`);
+      } else {
+        // 雲端尚無紀錄或本機有較多紀錄，上傳本機資料至雲端
+        await pushCloudData(false);
+      }
+    } catch (err) {
+      console.warn('Initial sync error, trying push fallback:', err);
+      try {
+        await pushCloudData(false);
+      } catch (pushErr) {
+        updateCloudSyncUI('⚠️ 連線失敗', false);
+        showToast('⚠️ 連線失敗，請檢查網址與 Google 權限是否設為「所有人」');
+      }
+    }
+  }
+
+  function generateSyncCode() {
+    const data = {
+      habits: state.habits,
+      checkins: state.checkins,
+      dailyNotes: state.dailyNotes,
+      sessions: state.sessions,
+      recentSubjects: state.recentSubjects,
+      exportedAt: Date.now()
+    };
+    try {
+      const jsonStr = JSON.stringify(data);
+      const code = btoa(encodeURIComponent(jsonStr));
+      navigator.clipboard.writeText(code).then(() => {
+        showToast('📋 已複製同步代碼！請傳到手機貼上匯入');
+      }).catch(() => {
+        const input = document.getElementById('importSyncCodeInput');
+        if (input) input.value = code;
+        showToast('請手動選取文字複製');
+      });
+    } catch (e) {
+      showToast('⚠️ 產生同步代碼失敗：' + e.message);
+    }
+  }
+
+  function applySyncCode() {
+    const input = document.getElementById('importSyncCodeInput');
+    const code = input ? input.value.trim() : '';
+    if (!code) {
+      showToast('⚠️ 請先貼上同步代碼');
+      return;
+    }
+    try {
+      const jsonStr = decodeURIComponent(atob(code));
+      const data = JSON.parse(jsonStr);
+      if (data && data.habits && Array.isArray(data.habits)) {
+        state.habits = data.habits;
+        state.checkins = data.checkins || {};
+        state.dailyNotes = data.dailyNotes || {};
+        state.sessions = data.sessions || [];
+        state.recentSubjects = data.recentSubjects || DEFAULT_SUBJECTS;
+
+        saveHabits();
+        saveCheckins();
+        saveDailyNotes();
+        saveSessions();
+        saveRecentSubjects();
+
+        renderHabitTable();
+        renderDailyNotes();
+        renderTimerView();
+        renderLogsView();
+        renderManageView();
+
+        closeModal('syncModal');
+        showToast('🎉 同步代碼還原成功！所有紀錄已同步完成！');
+      } else {
+        alert('同步代碼格式錯誤');
+      }
+    } catch (e) {
+      alert('解析同步代碼失敗：' + e.message);
+    }
+  }
+
+  // =========================================================================
   // 10. 事件監聽綁定 (Event Listeners)
   // =========================================================================
 
@@ -1558,7 +1800,7 @@
           if (!state.dailyNotes[weekKey]) state.dailyNotes[weekKey] = {};
           state.dailyNotes[weekKey][dayIdx] = e.target.value.trim();
           saveDailyNotes();
-          showToast('💾 隨筆記事已即時保存');
+          showToast('✓ 隨筆記事已自動即時儲存');
         }
       });
     }
@@ -1640,6 +1882,69 @@
     });
     document.getElementById('resetDefaultsBtn').addEventListener('click', resetToDefaults);
 
+    // 跨裝置雲端同步視窗與互動按鈕
+    function openSyncModal() {
+      const urlInput = document.getElementById('gasSyncUrlInput');
+      if (urlInput) urlInput.value = state.gasUrl || '';
+      openModal('syncModal');
+    }
+
+    const cloudSyncBtn = document.getElementById('cloudSyncBtn');
+    if (cloudSyncBtn) cloudSyncBtn.addEventListener('click', openSyncModal);
+
+    const boardSyncShortcutBtn = document.getElementById('boardSyncShortcutBtn');
+    if (boardSyncShortcutBtn) boardSyncShortcutBtn.addEventListener('click', openSyncModal);
+
+    const manageSyncBtn = document.getElementById('manageSyncBtn');
+    if (manageSyncBtn) manageSyncBtn.addEventListener('click', openSyncModal);
+
+    const openSyncFromBackupBtn = document.getElementById('openSyncFromBackupBtn');
+    if (openSyncFromBackupBtn) {
+      openSyncFromBackupBtn.addEventListener('click', () => {
+        closeModal('backupModal');
+        openSyncModal();
+      });
+    }
+
+    // Google Apps Script 表單與同步按鈕
+    const gasForm = document.getElementById('gasSyncForm');
+    if (gasForm) {
+      gasForm.addEventListener('submit', handleGasSyncSave);
+    }
+
+    const manualSyncBtn = document.getElementById('manualSyncBtn');
+    if (manualSyncBtn) {
+      manualSyncBtn.addEventListener('click', () => fetchCloudData(false));
+    }
+
+    const copyGasCodeBtn = document.getElementById('copyGasCodeBtn');
+    if (copyGasCodeBtn) {
+      copyGasCodeBtn.addEventListener('click', () => {
+        const snippetEl = document.getElementById('gasScriptSnippet');
+        const codeText = snippetEl ? snippetEl.innerText : '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(codeText).then(() => {
+            showToast('📋 已複製 Google Apps Script 程式碼！');
+          }).catch(() => {
+            showToast('請手動選取程式碼文字複製');
+          });
+        } else {
+          showToast('請手動選取程式碼文字複製');
+        }
+      });
+    }
+
+    // 方案 B 快速同步代碼按鈕
+    const genSyncCodeBtn = document.getElementById('generateSyncCodeBtn');
+    if (genSyncCodeBtn) {
+      genSyncCodeBtn.addEventListener('click', generateSyncCode);
+    }
+
+    const applySyncCodeBtn = document.getElementById('applySyncCodeBtn');
+    if (applySyncCodeBtn) {
+      applySyncCodeBtn.addEventListener('click', applySyncCode);
+    }
+
     // 通用彈窗關閉按鈕
     document.querySelectorAll('[data-close]').forEach(btn => {
       btn.addEventListener('click', () => closeModal(btn.dataset.close));
@@ -1668,6 +1973,19 @@
     renderManageView();
 
     bindEvents();
+
+    // 若已設定雲端同步，啟動時背景拉取最新資料
+    if (state.gasUrl) {
+      updateCloudSyncUI('🔄 同步中...', true);
+      fetchCloudData(true);
+    }
+
+    // 當手機/電腦切換視窗回到本分頁時自動重新拉取最新進度
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && state.gasUrl && !state.isSyncing) {
+        fetchCloudData(true);
+      }
+    });
 
     // 若有背景執行中的計時器，恢復間隔更新
     if (state.timer.isRunning) {
