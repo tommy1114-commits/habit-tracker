@@ -1998,6 +1998,12 @@
     }
   }
 
+  // 導出全域介面
+  window.openSyncModal = openSyncModal;
+  window.closeSyncModal = function () { closeModal('syncModal'); };
+  window.fetchCloudData = fetchCloudData;
+  window.pushCloudData = pushCloudData;
+
   // DOM 載入後啟動
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

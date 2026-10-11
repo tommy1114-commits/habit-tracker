@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261011_v2">
   <!-- Google Fonts for modern typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -66,7 +66,7 @@
         <button id="backupModalBtn" class="icon-btn" title="資料備份與匯出入（平時所有紀錄皆為自動即時儲存）" aria-label="Backup & Restore">
           <span>📦</span>
         </button>
-        <button id="cloudSyncBtn" class="icon-btn" title="跨裝置雲端同步 (手機/電腦同步)" aria-label="Cloud Sync">
+        <button id="cloudSyncBtn" class="icon-btn" onclick="openSyncModal()" title="跨裝置雲端同步 (手機/電腦同步)" aria-label="Cloud Sync">
           <span id="cloudIcon">☁️</span>
         </button>
         <button id="addHabitBtn" class="btn btn-primary btn-sm">
@@ -123,7 +123,7 @@
               <span class="board-hint-text">💡 點擊項目展開查看當週 7 天打卡陣列（免左右滑動）</span>
             </div>
             <div class="board-controls-right">
-              <button id="boardSyncShortcutBtn" class="btn btn-sm btn-outline" title="設定跨裝置雲端同步 (手機/電腦同步)">☁️ 雲端同步</button>
+              <button id="boardSyncShortcutBtn" class="btn btn-sm btn-outline" onclick="openSyncModal()" title="設定跨裝置雲端同步 (手機/電腦同步)">☁️ 雲端同步</button>
               <button id="expandAllBtn" class="btn btn-sm btn-outline" title="展開所有習慣的 7 天打卡格">展開全部</button>
               <button id="collapseAllBtn" class="btn btn-sm btn-outline" title="收合成簡潔清單">收合全部</button>
             </div>
@@ -277,7 +277,7 @@
             <p>自由自訂、新增、修改每週目標，或將習慣設為暫時休息</p>
           </div>
           <div style="display:flex;gap:8px;">
-            <button id="manageSyncBtn" class="btn btn-outline">
+            <button id="manageSyncBtn" class="btn btn-outline" onclick="openSyncModal()">
               <span>☁️</span> 跨裝置同步
             </button>
             <button id="manageAddBtn" class="btn btn-primary">
@@ -461,7 +461,7 @@
           <div class="backup-action-card" style="border-color:var(--primary);background:var(--primary-subtle);">
             <h4>☁️ 跨裝置雲端即時同步 (手機/電腦同步)</h4>
             <p>透過免費 Google 雲端實現手機與電腦自動即時雙向同步，免手動匯出入。</p>
-            <button id="openSyncFromBackupBtn" class="btn btn-primary btn-sm">開啟跨裝置同步設定</button>
+            <button id="openSyncFromBackupBtn" class="btn btn-primary btn-sm" onclick="document.getElementById('backupModal').classList.add('hidden');openSyncModal()">開啟跨裝置同步設定</button>
           </div>
 
           <div class="backup-action-card">
@@ -497,15 +497,14 @@
     </div>
   </div>
 
-  <!-- 4. 跨裝置雲端同步對話窗 (手機與電腦即時同步) -->
-  <div id="syncModal" class="modal-overlay hidden">
+  <div id="syncModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSyncModal()">
     <div class="modal-card modal-lg">
       <div class="modal-header">
         <div class="modal-title-wrap">
           <span class="modal-icon">☁️</span>
           <h3>跨裝置雲端同步設定 (手機與電腦同步)</h3>
         </div>
-        <button class="modal-close-btn" data-close="syncModal">&times;</button>
+        <button class="modal-close-btn" data-close="syncModal" onclick="closeSyncModal()">&times;</button>
       </div>
       <div class="modal-body">
         <div class="sync-intro-banner">
@@ -599,7 +598,24 @@ function doPost(e) {
   <!-- Toast 提示訊息 -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- 載入應用程式核心 JS -->
-  <script src="app.js"></script>
+  <!-- 雲端同步視窗保險控制器 (避免瀏覽器快取舊 JS 導致點擊無反應) -->
+  <script>
+    function openSyncModal() {
+      var modal = document.getElementById('syncModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        var input = document.getElementById('gasSyncUrlInput');
+        var saved = localStorage.getItem('focushabit_gas_url_v1');
+        if (input && saved) input.value = saved;
+      }
+    }
+    function closeSyncModal() {
+      var modal = document.getElementById('syncModal');
+      if (modal) modal.classList.add('hidden');
+    }
+  </script>
+
+  <!-- 載入應用程式核心 JS (加入版本號強制作廢瀏覽器快取) -->
+  <script src="app.js?v=20261011_v2"></script>
 </body>
 </html>
