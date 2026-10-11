@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css?v=20261011_v2">
+  <link rel="stylesheet" href="style.css?v=20261011_v5">
   <!-- Google Fonts for modern typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -77,6 +77,25 @@
 
     <!-- 主內容區 -->
     <main class="main-content">
+
+      <!-- 頂部全局跨裝置即時同步列 (手機與電腦隨時一鍵同步與即時狀態顯示) -->
+      <div class="global-sync-bar" id="globalSyncBar">
+        <div class="sync-bar-left">
+          <span class="sync-pulse-dot" id="syncStatusDot"></span>
+          <div class="sync-status-info">
+            <span class="sync-status-text" id="syncStatusSummary">跨裝置同步準備就緒</span>
+            <span class="sync-time-badge" id="syncLastTimeBadge">未同步</span>
+          </div>
+        </div>
+        <div class="sync-bar-right">
+          <button id="instantSyncBtn" class="btn btn-sm btn-primary sync-action-btn">
+            <span class="sync-btn-icon">🔄</span> <span class="sync-btn-label">立即雙向同步</span>
+          </button>
+          <button id="openSyncSettingsBtn" class="btn btn-sm btn-outline sync-settings-btn" title="設定或檢查 Google 同步網址">
+            <span>⚙️</span> 設定
+          </button>
+        </div>
+      </div>
 
       <!-- ============================================== -->
       <!-- VIEW 1: 週打卡看板 (BOARD) -->
@@ -544,18 +563,66 @@
                 <li>前往 <a href="https://script.google.com/home/start" target="_blank" rel="noopener">Google Apps Script (點此開啟)</a>，點擊左上角「<strong>新專案</strong>」。</li>
                 <li>刪除原本編輯區的所有內容，複製並貼上下方的 18 行同步代碼：
                   <div class="code-box-wrapper">
-                    <pre><code id="gasScriptSnippet">function doGet(e) {
+                    <pre><code id="gasScriptSnippet">function saveToStorage(contents) {
   var props = PropertiesService.getUserProperties();
-  var data = props.getProperty('habit_tracker_data');
-  return ContentService.createTextOutput(data || '{}')
-    .setMimeType(ContentService.MimeType.JSON);
+  var chunkSize = 8000;
+  var count = Math.ceil(contents.length / chunkSize);
+  var oldChunks = parseInt(props.getProperty('habit_chunks_count') || '0', 10);
+  for (var i = 0; i < oldChunks; i++) {
+    props.deleteProperty('habit_chunk_' + i);
+  }
+  if (count <= 1) {
+    props.setProperty('habit_tracker_data', contents);
+    props.deleteProperty('habit_chunks_count');
+  } else {
+    props.setProperty('habit_chunks_count', count.toString());
+    for (var j = 0; j < count; j++) {
+      props.setProperty('habit_chunk_' + j, contents.substr(j * chunkSize, chunkSize));
+    }
+    props.deleteProperty('habit_tracker_data');
+  }
+}
+
+function loadFromStorage() {
+  var props = PropertiesService.getUserProperties();
+  var countStr = props.getProperty('habit_chunks_count');
+  if (countStr) {
+    var count = parseInt(countStr, 10);
+    var result = '';
+    for (var i = 0; i < count; i++) {
+      result += (props.getProperty('habit_chunk_' + i) || '');
+    }
+    return result;
+  }
+  return props.getProperty('habit_tracker_data') || '';
+}
+
+function doGet(e) {
+  try {
+    var data = loadFromStorage();
+    var output = data ? data : JSON.stringify({ empty: true });
+    return ContentService.createTextOutput(output)
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 function doPost(e) {
-  var props = PropertiesService.getUserProperties();
-  props.setProperty('habit_tracker_data', e.postData.contents);
-  return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
-    .setMimeType(ContentService.MimeType.JSON);
+  try {
+    var contents = e.postData.contents;
+    if (!contents) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'No content' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    saveToStorage(contents);
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }</code></pre>
                     <button type="button" class="btn btn-sm btn-outline copy-code-btn" id="copyGasCodeBtn">📋 一鍵複製代碼</button>
                   </div>
@@ -595,11 +662,58 @@ function doPost(e) {
     </div>
   </div>
 
+  <!-- 5. 跨裝置即時同步回饋結果彈窗 -->
+  <div id="syncResultModal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('syncResultModal')">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon" id="syncResultIcon">🎉</span>
+          <h3 id="syncResultTitle">跨裝置同步完成</h3>
+        </div>
+        <button class="modal-close-btn" data-close="syncResultModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="syncResultMsg" class="modal-desc" style="font-size:0.95rem;line-height:1.6;color:var(--text-primary);margin-bottom:14px;">
+          手機與電腦的打卡進度、專注歷程與生活亮點已全數成功合併！
+        </p>
+        <div class="sync-details-box" id="syncResultDetails">
+          <div class="sync-stat-item">
+            <span class="sync-stat-label">進行中習慣</span>
+            <span class="sync-stat-val" id="resHabitsCount">0 項</span>
+          </div>
+          <div class="sync-stat-item">
+            <span class="sync-stat-label">本週打卡完成</span>
+            <span class="sync-stat-val" id="resCheckinsCount">0 次</span>
+          </div>
+          <div class="sync-stat-item">
+            <span class="sync-stat-label">生活亮點隨筆</span>
+            <span class="sync-stat-val" id="resNotesCount">0 天</span>
+          </div>
+          <div class="sync-stat-item">
+            <span class="sync-stat-label">專注計時紀錄</span>
+            <span class="sync-stat-val" id="resSessionsCount">0 筆</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-close="syncResultModal">太棒了，確定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast 提示訊息 -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- 雲端同步視窗保險控制器 (避免瀏覽器快取舊 JS 導致點擊無反應) -->
+  <!-- 彈窗與同步視窗保險控制器 (避免瀏覽器快取舊 JS 導致點擊無反應) -->
   <script>
+    function openModal(id) {
+      var modal = document.getElementById(id);
+      if (modal) modal.classList.remove('hidden');
+    }
+    function closeModal(id) {
+      var modal = document.getElementById(id);
+      if (modal) modal.classList.add('hidden');
+    }
     function openSyncModal() {
       var modal = document.getElementById('syncModal');
       if (modal) {
@@ -616,6 +730,6 @@ function doPost(e) {
   </script>
 
   <!-- 載入應用程式核心 JS (加入版本號強制作廢瀏覽器快取) -->
-  <script src="app.js?v=20261011_v4"></script>
+  <script src="app.js?v=20261011_v5"></script>
 </body>
 </html>
