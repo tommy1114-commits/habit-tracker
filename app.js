@@ -61,7 +61,8 @@
     dailyNotes: {},         // { [weekKey]: { [dayIdx]: string } }
     sessions: [],           // array of { id, habitId, habitName, subject, notes, startTime, endTime, durationSeconds, dateStr, weekKey, dayOfWeek }
     recentSubjects: [],
-    theme: 'dark',
+    theme: 'light',
+    expandedHabitIds: new Set(),
     timer: {
       isRunning: false,
       isPaused: false,
@@ -153,7 +154,7 @@
       state.recentSubjects = storedSubjects ? JSON.parse(storedSubjects) : [...DEFAULT_SUBJECTS];
 
       const storedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
-      state.theme = storedTheme || 'dark';
+      state.theme = storedTheme || 'light';
 
       // 檢查是否有進行中的背景計時器
       const storedTimer = localStorage.getItem(STORAGE_KEYS.ACTIVE_TIMER);
@@ -228,7 +229,7 @@
   // =========================================================================
 
   /**
-   * 渲染週次標題與 7 天日期標頭
+   * 渲染週次標題與日期範圍
    */
   function renderWeekNavigator() {
     const sunday = state.currentWeekStart;
@@ -248,30 +249,6 @@
     if (weekRangeEl) {
       weekRangeEl.textContent = `${formatDateKey(sunday)} (週日) ~ ${formatDateKey(saturday)} (週六)`;
     }
-
-    // 渲染 7 天表頭日期
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-      const dayDate = new Date(sunday);
-      dayDate.setDate(sunday.getDate() + dayIdx);
-
-      const headerEl = document.getElementById(`dateHeader${dayIdx}`);
-      if (headerEl) {
-        headerEl.textContent = formatMonthDay(dayDate);
-      }
-
-      // 今日高亮
-      const thEl = document.querySelector(`.col-day[data-day="${dayIdx}"]`);
-      if (thEl) {
-        if (dayDate.getTime() === today.getTime()) {
-          thEl.classList.add('is-today');
-        } else {
-          thEl.classList.remove('is-today');
-        }
-      }
-    }
   }
 
   /**
@@ -286,13 +263,14 @@
   }
 
   /**
-   * 渲染週打卡表格 (Habit Table Body)
+   * 渲染兩層式週打卡看板 (第一層：項目與進度總覽 / 第二層：點開展開當週 7 天陣列打卡格)
    */
   function renderHabitTable() {
-    const tbody = document.getElementById('habitTableBody');
-    if (!tbody) return;
+    const container = document.getElementById('habitCardsContainer');
+    const countBadge = document.getElementById('boardHabitsCount');
+    if (!container) return;
 
-    tbody.innerHTML = '';
+    container.innerHTML = '';
     const weekKey = formatDateKey(state.currentWeekStart);
 
     // 確保本週有打卡儲存物件
@@ -303,22 +281,38 @@
     const activeHabits = state.habits.filter(h => !h.paused);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const todayDayIdx = today.getDay(); // 0 is Sunday, 1 is Monday ...
+
+    // 當週日期範圍
+    const sunday = state.currentWeekStart;
+    const saturday = new Date(sunday);
+    saturday.setDate(sunday.getDate() + 6);
+    const weekRangeText = `${formatMonthDay(sunday)} (週日) ~ ${formatMonthDay(saturday)} (週六)`;
+
+    // 預設第一次若無任何展開，展開第一個習慣以便初次檢視
+    if (state.expandedHabitIds.size === 0 && activeHabits.length > 0) {
+      state.expandedHabitIds.add(activeHabits[0].id);
+    }
+
+    if (countBadge) {
+      countBadge.textContent = `共 ${activeHabits.length} 個進行中習慣`;
+    }
 
     let totalTarget = 0;
     let totalCompleted = 0;
     let achievedHabits = 0;
 
     if (activeHabits.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="11" class="empty-state">
-            🌱 目前沒有進行中的習慣，點擊右上角「➕ 新增習慣」或到習慣管理開啟！
-          </td>
-        </tr>
+      container.innerHTML = `
+        <div class="empty-state" style="background:var(--bg-card);border:1px dashed var(--border-color);border-radius:var(--radius-lg);padding:40px 20px;">
+          🌱 目前沒有進行中的習慣項目，點擊右上角「➕ 新增習慣」或到習慣管理開啟！
+        </div>
       `;
       updateSummaryCards(0, 0, 0);
       return;
     }
+
+    const dayNames = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
     activeHabits.forEach(habit => {
       // 確保打卡陣列存在 (7天)
@@ -340,87 +334,142 @@
       // 檢查本週各天是否有關聯的計時紀錄
       const weekSessions = state.sessions.filter(s => s.weekKey === weekKey && s.habitId === habit.id);
 
-      const tr = document.createElement('tr');
-      tr.className = 'habit-row';
+      // 今日是否已打卡 (第一層快捷按鈕使用)
+      const isTodayChecked = !!daysCheck[todayDayIdx];
+      const isExpanded = state.expandedHabitIds.has(habit.id);
 
-      // 1. 習慣資訊欄
-      let rowHtml = `
-        <td class="col-habit">
-          <div class="habit-info-cell">
-            <span class="habit-emoji">${habit.emoji || '🎯'}</span>
-            <div class="habit-title-wrap">
-              <span class="habit-name">${escapeHtml(habit.name)}</span>
-              <div class="habit-tags-row">
-                <span class="badge badge-accent">${escapeHtml(habit.category || '習慣')}</span>
-                ${habit.timerEnabled ? '<span class="badge badge-primary">⏱️ 碼表</span>' : ''}
-              </div>
-            </div>
-          </div>
-        </td>
-        <td class="col-target">${targetCount} 次</td>
-        <td class="col-progress">
-          <div class="progress-cell-wrap">
-            <span class="progress-pill ${isAchieved ? 'achieved' : ''}">
-              ${completedCount}/${targetCount} (${progressPercent}%)
-            </span>
-            <div class="mini-progress-bar">
-              <div class="mini-progress-fill ${isAchieved ? 'achieved' : ''}" style="width: ${progressPercent}%;"></div>
-            </div>
-          </div>
-        </td>
-      `;
-
-      // 2. 7 天打卡按鈕 (0=週日 ~ 6=週六)
+      // 生成第二層的 7 天陣列 HTML
+      let daysMatrixHtml = '';
       for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-        const isChecked = daysCheck[dayIdx];
+        const isChecked = !!daysCheck[dayIdx];
         const dayDate = new Date(state.currentWeekStart);
         dayDate.setDate(state.currentWeekStart.getDate() + dayIdx);
         const isDayToday = dayDate.getTime() === today.getTime();
 
-        // 該天是否有此習慣的專注計時紀錄
-        const hasSessionToday = weekSessions.some(s => s.dayOfWeek === dayIdx);
+        // 該天計時時長
+        const daySessions = weekSessions.filter(s => s.dayOfWeek === dayIdx);
+        const daySecs = daySessions.reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
+        let sessionBadgeHtml = '';
+        if (daySecs > 0) {
+          const mins = Math.round(daySecs / 60);
+          const durationStr = mins >= 60 ? `${(daySecs / 3600).toFixed(1)}h` : `${mins}m`;
+          sessionBadgeHtml = `<div class="day-session-badge" title="本日累計投入 ${durationStr}">⏱️ ${durationStr}</div>`;
+        } else {
+          sessionBadgeHtml = '<div class="day-session-placeholder"></div>';
+        }
 
-        rowHtml += `
-          <td class="col-day ${isDayToday ? 'is-today' : ''}">
-            <div class="check-btn-wrap">
-              <button 
-                class="check-btn ${isChecked ? 'checked' : ''} ${hasSessionToday ? 'has-timer' : ''}"
-                data-habit-id="${habit.id}"
-                data-day="${dayIdx}"
-                title="${isChecked ? '點擊取消打卡' : '點擊完成打卡'}"
-                aria-label="打卡 ${habit.name}"
-              >
-                ${isChecked ? '✓' : ''}
-              </button>
+        daysMatrixHtml += `
+          <div class="day-cell-card ${isDayToday ? 'is-today' : ''} ${isChecked ? 'is-checked' : ''}">
+            <div class="day-cell-header">
+              <span class="day-cell-name">${dayNames[dayIdx]}</span>
+              <span class="day-cell-date">${formatMonthDay(dayDate)}</span>
+              ${isDayToday ? '<span class="today-badge">今日</span>' : ''}
             </div>
-          </td>
+            <button 
+              class="day-matrix-btn ${isChecked ? 'checked' : ''} ${daySecs > 0 ? 'has-timer' : ''}"
+              data-action="toggle-check"
+              data-habit-id="${habit.id}"
+              data-day="${dayIdx}"
+              title="${dayNames[dayIdx]} (${formatMonthDay(dayDate)}) - 點擊切換打卡"
+              aria-label="打卡 ${habit.name} ${dayNames[dayIdx]}"
+            >
+              ${isChecked ? '✓' : ''}
+            </button>
+            ${sessionBadgeHtml}
+          </div>
         `;
       }
 
-      // 3. 操作欄 (碼表快捷、編輯、暫時休息)
-      rowHtml += `
-        <td class="col-actions">
-          <div class="row-actions">
-            ${habit.timerEnabled ? `
-              <button class="row-action-btn btn-timer" data-action="quick-timer" data-habit-id="${habit.id}" title="啟動此習慣碼表">
-                ⏱️
-              </button>
-            ` : ''}
-            <button class="row-action-btn" data-action="edit-habit" data-habit-id="${habit.id}" title="編輯目標">
-              ✏️
+      // 構建整個卡片 (第一層 + 第二層)
+      const card = document.createElement('div');
+      card.className = `habit-card ${isExpanded ? 'expanded' : ''}`;
+      card.dataset.habitId = habit.id;
+
+      card.innerHTML = `
+        <!-- 第一層：習慣項目總覽 (點擊整行可展開/收合) -->
+        <div class="habit-card-header" data-action="toggle-expand" data-habit-id="${habit.id}">
+          <div class="habit-card-left">
+            <span class="habit-emoji">${habit.emoji || '🎯'}</span>
+            <div class="habit-card-info">
+              <div class="habit-card-title-row">
+                <span class="habit-name">${escapeHtml(habit.name)}</span>
+                <span class="badge badge-category">${escapeHtml(habit.category || '習慣')}</span>
+                ${habit.timerEnabled ? '<span class="badge badge-primary">⏱️ 碼表</span>' : ''}
+              </div>
+              <div class="habit-card-sub">
+                <span>每週目標: <strong>${targetCount} 次</strong></span>
+                <span class="dot-sep">·</span>
+                <span>已完成: <strong class="${isAchieved ? 'text-accent' : ''}">${completedCount} 次</strong></span>
+                ${isAchieved ? '<span class="badge badge-success">已達標 🎉</span>' : ''}
+              </div>
+            </div>
+          </div>
+
+          <div class="habit-card-middle">
+            <div class="habit-progress-wrap">
+              <div class="progress-info-row">
+                <span class="progress-rate-text ${isAchieved ? 'achieved' : ''}">${progressPercent}%</span>
+                <span class="progress-count-text">${completedCount}/${targetCount}</span>
+              </div>
+              <div class="progress-track-sm">
+                <div class="progress-bar-sm ${isAchieved ? 'achieved' : ''}" style="width: ${progressPercent}%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="habit-card-right">
+            <!-- 今日快速打卡按鈕 (免展開直接打卡今日) -->
+            <button 
+              class="today-quick-check-btn ${isTodayChecked ? 'checked' : ''}" 
+              data-action="today-check" 
+              data-habit-id="${habit.id}" 
+              data-day="${todayDayIdx}"
+              title="快速為今日 (${formatMonthDay(today)}) 打卡"
+            >
+              <span class="quick-check-circle">${isTodayChecked ? '✓' : ''}</span>
+              <span class="quick-check-text">${isTodayChecked ? '今日已打卡' : '今日打卡'}</span>
             </button>
-            <button class="row-action-btn" data-action="pause-habit" data-habit-id="${habit.id}" title="暫時休息 (封存)">
-              ⏸️
+
+            <!-- 展開/收合切換鈕 -->
+            <button class="expand-toggle-btn" data-action="toggle-expand" data-habit-id="${habit.id}" title="展開/收合 7 天打卡格">
+              <span>${isExpanded ? '收合' : '展開 7 天'}</span>
+              <span class="expand-arrow">▼</span>
             </button>
           </div>
-        </td>
+        </div>
+
+        <!-- 第二層：點開展開的當週 7 天陣列日曆抽屜 (免左右滑動) -->
+        <div class="habit-card-body ${isExpanded ? 'open' : ''}">
+          <div class="weekly-matrix-panel">
+            <div class="matrix-title-bar">
+              <span class="matrix-title">📅 當週 7 天打卡進度 (${weekRangeText})</span>
+              <div class="matrix-actions">
+                ${habit.timerEnabled ? `
+                  <button class="btn btn-sm btn-outline btn-timer" data-action="quick-timer" data-habit-id="${habit.id}" title="開啟此習慣專注碼表">
+                    ⏱️ 開始計時
+                  </button>
+                ` : ''}
+                <button class="btn btn-sm btn-outline" data-action="edit-habit" data-habit-id="${habit.id}" title="編輯目標與名稱">
+                  ✏️ 編輯
+                </button>
+                <button class="btn btn-sm btn-outline" data-action="pause-habit" data-habit-id="${habit.id}" title="暫時休息此習慣">
+                  ⏸️ 休息
+                </button>
+              </div>
+            </div>
+
+            <!-- 7 天陣列排布 -->
+            <div class="week-days-array">
+              ${daysMatrixHtml}
+            </div>
+          </div>
+        </div>
       `;
 
-      tr.innerHTML = rowHtml;
-      tbody.appendChild(tr);
+      container.appendChild(card);
     });
 
-    // 更新頂部總結卡片
+    // 更新頂部總結儀表板
     updateSummaryCards(totalCompleted, totalTarget, achievedHabits);
   }
 
@@ -1416,34 +1465,86 @@
       renderDailyNotes();
     });
 
-    // 表格委派事件：打卡按鈕、快捷碼表、編輯、休息
-    const tbody = document.getElementById('habitTableBody');
-    if (tbody) {
-      tbody.addEventListener('click', (e) => {
-        // 打卡勾選
-        const checkBtn = e.target.closest('.check-btn');
-        if (checkBtn) {
-          const habitId = checkBtn.dataset.habitId;
-          const dayIdx = parseInt(checkBtn.dataset.day, 10);
+    // 兩層式習慣看板事件委派 (今日快打、7天矩陣打卡、展開收合、碼表、編輯、休息)
+    const boardContainer = document.getElementById('habitCardsContainer');
+    if (boardContainer) {
+      boardContainer.addEventListener('click', (e) => {
+        // 1. 今日快速打卡按鈕 (第一層)
+        const todayBtn = e.target.closest('[data-action="today-check"]');
+        if (todayBtn) {
+          e.stopPropagation();
+          const habitId = todayBtn.dataset.habitId;
+          const dayIdx = parseInt(todayBtn.dataset.day, 10);
           toggleCheckin(habitId, dayIdx);
           return;
         }
 
-        // 操作按鈕
-        const actionBtn = e.target.closest('.row-action-btn');
-        if (actionBtn) {
-          const action = actionBtn.dataset.action;
-          const habitId = actionBtn.dataset.habitId;
-          if (action === 'quick-timer') {
-            switchView('timer');
-            const selectEl = document.getElementById('timerHabitSelect');
-            if (selectEl) selectEl.value = habitId;
-          } else if (action === 'edit-habit') {
-            openEditHabitModal(habitId);
-          } else if (action === 'pause-habit') {
-            togglePauseHabit(habitId);
-          }
+        // 2. 7 天陣列日曆打卡按鈕 (第二層)
+        const matrixBtn = e.target.closest('[data-action="toggle-check"]');
+        if (matrixBtn) {
+          e.stopPropagation();
+          const habitId = matrixBtn.dataset.habitId;
+          const dayIdx = parseInt(matrixBtn.dataset.day, 10);
+          toggleCheckin(habitId, dayIdx);
+          return;
         }
+
+        // 3. 快捷啟動碼表
+        const timerBtn = e.target.closest('[data-action="quick-timer"]');
+        if (timerBtn) {
+          e.stopPropagation();
+          const habitId = timerBtn.dataset.habitId;
+          switchView('timer');
+          const selectEl = document.getElementById('timerHabitSelect');
+          if (selectEl) selectEl.value = habitId;
+          return;
+        }
+
+        // 4. 編輯習慣
+        const editBtn = e.target.closest('[data-action="edit-habit"]');
+        if (editBtn) {
+          e.stopPropagation();
+          openEditHabitModal(editBtn.dataset.habitId);
+          return;
+        }
+
+        // 5. 休息/封存習慣
+        const pauseBtn = e.target.closest('[data-action="pause-habit"]');
+        if (pauseBtn) {
+          e.stopPropagation();
+          togglePauseHabit(pauseBtn.dataset.habitId);
+          return;
+        }
+
+        // 6. 點擊第一層標題列或展開鈕切換展開/收合
+        const expandTarget = e.target.closest('[data-action="toggle-expand"]');
+        if (expandTarget) {
+          const habitId = expandTarget.dataset.habitId;
+          if (state.expandedHabitIds.has(habitId)) {
+            state.expandedHabitIds.delete(habitId);
+          } else {
+            state.expandedHabitIds.add(habitId);
+          }
+          renderHabitTable();
+          return;
+        }
+      });
+    }
+
+    // 全部展開與全部收合
+    const expandAllBtn = document.getElementById('expandAllBtn');
+    if (expandAllBtn) {
+      expandAllBtn.addEventListener('click', () => {
+        state.habits.filter(h => !h.paused).forEach(h => state.expandedHabitIds.add(h.id));
+        renderHabitTable();
+      });
+    }
+
+    const collapseAllBtn = document.getElementById('collapseAllBtn');
+    if (collapseAllBtn) {
+      collapseAllBtn.addEventListener('click', () => {
+        state.expandedHabitIds.clear();
+        renderHabitTable();
       });
     }
 

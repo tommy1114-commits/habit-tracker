@@ -13,8 +13,8 @@
   --border-subtle: #edf2f7;
   
   --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
   
   --primary: #4f46e5;
   --primary-hover: #4338ca;
@@ -559,133 +559,459 @@ body {
 }
 
 /* ==========================================================================
-   習慣打卡網格表格 (Table Layout)
+   兩層式週打卡看板 (Two-Level Accordion Habit Cards Layout)
+   第一層：項目總覽、每週目標、進度條、今日快速打卡
+   第二層：展開當週 7 天陣列打卡格、今日高亮、計時歷程、操作工具 (免左右滑動)
    ========================================================================== */
 
-.table-container {
-  overflow-x: auto;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+.habit-board-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   margin-bottom: 32px;
 }
 
-.table-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  min-width: 900px;
-}
-
-.habit-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  text-align: left;
-}
-
-.habit-table th {
-  background-color: var(--bg-secondary);
-  padding: 14px 12px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--border-color);
-  white-space: nowrap;
-}
-
-.habit-table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid var(--border-color);
-  vertical-align: middle;
-  transition: background-color 0.15s ease;
-}
-
-.habit-table tr:last-child td {
-  border-bottom: none;
-}
-
-.habit-table tr:hover td {
-  background-color: var(--bg-card-hover);
-}
-
-/* 欄位寬度與對齊 */
-.col-habit { min-width: 260px; }
-.col-target { width: 70px; text-align: center; }
-.col-progress { width: 110px; text-align: center; }
-.col-day { width: 68px; text-align: center; }
-.col-actions { width: 120px; text-align: center; }
-
-/* 日期表頭 */
-.habit-table th.col-day {
-  text-align: center;
-  position: relative;
-}
-
-.day-name {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.day-date {
-  display: block;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-/* 今日高亮標記 */
-th.col-day.is-today,
-td.col-day.is-today {
-  background-color: rgba(99, 102, 241, 0.08);
-}
-
-th.col-day.is-today .day-name {
-  color: var(--primary);
-  font-weight: 800;
-}
-
-/* 習慣資訊儲存格 */
-.habit-info-cell {
+.board-controls-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+.board-controls-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.board-count-badge {
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: var(--primary);
+  background-color: var(--primary-subtle);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+}
+
+.board-hint-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.board-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.habit-cards-accordion {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
+/* 習慣主卡片 (兩層式外框) */
+.habit-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.habit-card:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: var(--shadow-md);
+}
+
+.habit-card.expanded {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
+
+/* 第一層：卡片標題列 (Level 1 Summary Row) */
+.habit-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  cursor: pointer;
+  user-select: none;
+  gap: 16px;
+  transition: background-color 0.15s ease;
+}
+
+.habit-card-header:hover {
+  background-color: var(--bg-card-hover);
+}
+
+.habit-card-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 220px;
+}
+
 .habit-emoji {
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   line-height: 1;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-md);
   background-color: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
-.habit-title-wrap {
+.habit-card-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+}
+
+.habit-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .habit-name {
-  font-weight: 600;
-  font-size: 0.925rem;
+  font-weight: 700;
+  font-size: 1rem;
   color: var(--text-primary);
+  line-height: 1.3;
 }
 
-.habit-tags-row {
+.habit-card-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
+.dot-sep {
+  color: var(--border-color);
+}
+
+/* 第一層中間：進度條與百分比 */
+.habit-card-middle {
+  display: flex;
+  align-items: center;
+  min-width: 150px;
+  max-width: 200px;
+  flex: 1;
+}
+
+.habit-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.progress-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.progress-rate-text {
+  color: var(--primary);
+}
+
+.progress-rate-text.achieved {
+  color: var(--success);
+}
+
+.progress-track-sm {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-bar-sm {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.progress-bar-sm.achieved {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+/* 第一層右側：今日快速打卡與展開箭頭 */
+.habit-card-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.today-quick-check-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1.5px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+.today-quick-check-btn:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.today-quick-check-btn.checked {
+  background-color: var(--success-subtle);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.quick-check-circle {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.today-quick-check-btn.checked .quick-check-circle {
+  background-color: var(--success);
+  border-color: var(--success);
+  color: #ffffff;
+}
+
+.expand-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+}
+
+.expand-toggle-btn:hover {
+  background-color: var(--primary-subtle);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.expand-arrow {
+  font-size: 0.75rem;
+  transition: transform 0.25s ease;
+}
+
+.habit-card.expanded .expand-arrow {
+  transform: rotate(180deg);
+}
+
+/* 第二層：展開抽屜 (Level 2 Expanded 7-Day Panel) */
+.habit-card-body {
+  display: none;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  padding: 18px 20px;
+  animation: slideDown 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.habit-card-body.open {
+  display: block;
+}
+
+.weekly-matrix-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.matrix-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.matrix-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.matrix-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 7 天陣列排布 (整齊排列在卡片內，完全不需橫向滾動) */
+.week-days-array {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.day-cell-card {
+  background-color: var(--bg-card);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: center;
+  transition: var(--transition);
+  min-width: 0;
+}
+
+.day-cell-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.day-cell-card.is-today {
+  border-color: var(--primary);
+  background-color: rgba(99, 102, 241, 0.05);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.12);
+}
+
+.day-cell-card.is-checked {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.day-cell-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.day-cell-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.day-cell-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.today-badge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: #ffffff;
+  background-color: var(--primary);
+  padding: 1px 5px;
+  border-radius: var(--radius-full);
+  line-height: 1.2;
+  margin-top: 1px;
+}
+
+.day-matrix-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+  outline: none;
+}
+
+.day-matrix-btn:hover {
+  border-color: var(--primary);
+  transform: scale(1.08);
+}
+
+.day-matrix-btn.checked {
+  background-color: var(--success);
+  border-color: var(--success);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
+  animation: checkPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.day-matrix-btn.has-timer::after {
+  content: '⏱️';
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 0.65rem;
+  background-color: var(--bg-card);
+  border-radius: var(--radius-full);
+  padding: 1px;
+  line-height: 1;
+}
+
+.day-session-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  padding: 2px 5px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  max-width: 95%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.day-session-placeholder {
+  height: 16px;
+}
+
+/* 標籤類別共用 */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -702,122 +1028,7 @@ th.col-day.is-today .day-name {
 .badge-accent { background: var(--accent-subtle); color: var(--accent); }
 .badge-success { background: var(--success-subtle); color: var(--success); }
 .badge-warning { background: var(--warning-subtle); color: var(--warning); }
-
-/* 進度與完成率 */
-.progress-cell-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.progress-pill {
-  font-size: 0.8rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: var(--radius-full);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.progress-pill.achieved {
-  background-color: var(--success-subtle);
-  color: var(--success);
-}
-
-.mini-progress-bar {
-  width: 60px;
-  height: 4px;
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.mini-progress-fill {
-  height: 100%;
-  background-color: var(--primary);
-  border-radius: var(--radius-full);
-  transition: width 0.3s ease;
-}
-
-.mini-progress-fill.achieved {
-  background-color: var(--success);
-}
-
-/* ==========================================================================
-   每日打卡按鈕 (Check-in Toggle Buttons)
-   ========================================================================== */
-
-.check-btn-wrap {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.check-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  border: 2px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: var(--transition);
-  position: relative;
-  outline: none;
-}
-
-.check-btn:hover {
-  border-color: var(--primary);
-  transform: scale(1.08);
-}
-
-.check-btn.checked {
-  background-color: var(--success);
-  border-color: var(--success);
-  color: #ffffff;
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
-  animation: checkPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-@keyframes checkPop {
-  0% { transform: scale(0.7); }
-  50% { transform: scale(1.15); }
-  100% { transform: scale(1); }
-}
-
-/* 若當天具有專注計時紀錄，在打卡格角標顯示小秒針 */
-.check-btn.has-timer::after {
-  content: '⏱️';
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  font-size: 0.65rem;
-  background-color: var(--bg-card);
-  border-radius: var(--radius-full);
-  padding: 1px;
-  line-height: 1;
-}
-
-/* 打卡列快捷操作按鈕組 */
-.row-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-
-.row-action-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  border: none;
+.badge-category { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); }
   color: var(--text-muted);
   cursor: pointer;
   display: inline-flex;
@@ -1703,10 +1914,73 @@ th.col-day.is-today .day-name {
   }
   
   .main-content {
-    padding: 16px;
+    padding: 14px 10px;
   }
   
   .timer-numbers {
     font-size: 2.8rem;
+  }
+
+  /* 兩層式打卡看板手機適配 (完美塞進螢幕，絕無左右橫向滾動) */
+  .habit-card-header {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px;
+  }
+  
+  .habit-card-left {
+    min-width: 100%;
+  }
+
+  .habit-card-middle {
+    flex: 1;
+    min-width: 120px;
+    max-width: none;
+  }
+
+  .habit-card-right {
+    gap: 8px;
+  }
+
+  .today-quick-check-btn {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+  }
+
+  .habit-card-body {
+    padding: 14px 8px;
+  }
+
+  .week-days-array {
+    gap: 4px;
+  }
+
+  .day-cell-card {
+    padding: 6px 1px;
+    border-radius: var(--radius-sm);
+  }
+
+  .day-cell-name {
+    font-size: 0.7rem;
+  }
+
+  .day-cell-date {
+    font-size: 0.65rem;
+  }
+
+  .today-badge {
+    font-size: 0.58rem;
+    padding: 0 3px;
+  }
+
+  .day-matrix-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 0.95rem;
+  }
+
+  .matrix-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }

@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
-<body data-theme="dark">
+<body data-theme="light">
   <div class="app-container">
 
     <!-- 頂部即時浮動計時列 (當碼表運行或暫停時吸頂提示) -->
@@ -61,7 +61,7 @@
 
       <div class="header-tools">
         <button id="themeToggleBtn" class="icon-btn" title="切換深淺色主題" aria-label="Toggle Theme">
-          <span id="themeIcon">☀️</span>
+          <span id="themeIcon">🌙</span>
         </button>
         <button id="backupModalBtn" class="icon-btn" title="資料備份與還原" aria-label="Backup & Restore">
           <span>💾</span>
@@ -112,50 +112,22 @@
           </div>
         </div>
 
-        <!-- 習慣打卡網格表格 -->
-        <div class="table-container">
-          <div class="table-card">
-            <table class="habit-table">
-              <thead>
-                <tr>
-                  <th class="col-habit">習慣項目</th>
-                  <th class="col-target">目標</th>
-                  <th class="col-progress">進度</th>
-                  <th class="col-day" data-day="0">
-                    <span class="day-name">週日</span>
-                    <span class="day-date" id="dateHeader0">-</span>
-                  </th>
-                  <th class="col-day" data-day="1">
-                    <span class="day-name">週一</span>
-                    <span class="day-date" id="dateHeader1">-</span>
-                  </th>
-                  <th class="col-day" data-day="2">
-                    <span class="day-name">週二</span>
-                    <span class="day-date" id="dateHeader2">-</span>
-                  </th>
-                  <th class="col-day" data-day="3">
-                    <span class="day-name">週三</span>
-                    <span class="day-date" id="dateHeader3">-</span>
-                  </th>
-                  <th class="col-day" data-day="4">
-                    <span class="day-name">週四</span>
-                    <span class="day-date" id="dateHeader4">-</span>
-                  </th>
-                  <th class="col-day" data-day="5">
-                    <span class="day-name">週五</span>
-                    <span class="day-date" id="dateHeader5">-</span>
-                  </th>
-                  <th class="col-day" data-day="6">
-                    <span class="day-name">週六</span>
-                    <span class="day-date" id="dateHeader6">-</span>
-                  </th>
-                  <th class="col-actions">操作</th>
-                </tr>
-              </thead>
-              <tbody id="habitTableBody">
-                <!-- 動態注入打卡清單項目 -->
-              </tbody>
-            </table>
+        <!-- 兩層式習慣打卡看板 (第一層：項目與進度總覽 / 第二層：點開展開當週 7 天陣列打卡) -->
+        <div class="habit-board-container">
+          <div class="board-controls-bar">
+            <div class="board-controls-left">
+              <span class="board-count-badge" id="boardHabitsCount">載入中...</span>
+              <span class="board-hint-text">💡 點擊項目展開查看當週 7 天打卡陣列（免左右滑動）</span>
+            </div>
+            <div class="board-controls-right">
+              <button id="expandAllBtn" class="btn btn-sm btn-outline" title="展開所有習慣的 7 天打卡格">展開全部</button>
+              <button id="collapseAllBtn" class="btn btn-sm btn-outline" title="收合成簡潔清單">收合全部</button>
+            </div>
+          </div>
+
+          <!-- 習慣卡片兩層式清單容器 -->
+          <div class="habit-cards-accordion" id="habitCardsContainer">
+            <!-- 動態注入習慣兩層式卡片 -->
           </div>
         </div>
 
