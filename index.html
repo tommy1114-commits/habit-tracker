@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>關鍵行動週打卡 & 習慣記錄 App | FocusHabit</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <!-- Google Fonts for modern typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body data-theme="dark">
+  <div class="app-container">
+
+    <!-- 頂部即時浮動計時列 (當碼表運行或暫停時吸頂提示) -->
+    <div id="stickyTimerBar" class="sticky-timer-bar hidden">
+      <div class="sticky-timer-content">
+        <div class="sticky-timer-pulse"></div>
+        <div class="sticky-timer-info">
+          <span class="sticky-timer-label">⏱️ 計時中：</span>
+          <strong id="stickyTimerTitle">看書</strong>
+          <span id="stickyTimerSubject" class="sticky-timer-sub"></span>
+        </div>
+        <div class="sticky-timer-digits" id="stickyTimerDigits">00:00:00</div>
+        <div class="sticky-timer-actions">
+          <button id="stickyPauseBtn" class="btn btn-sm btn-outline">暫停</button>
+          <button id="stickyFinishBtn" class="btn btn-sm btn-primary">結算</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 頂部導航欄 -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="brand-logo">🎯</div>
+        <div class="brand-text">
+          <h1>關鍵行動週打卡</h1>
+          <span class="brand-subtitle">FocusHabit Tracker</span>
+        </div>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-view="board">
+          <span class="tab-icon">📋</span> 週打卡看板
+        </button>
+        <button class="nav-tab" data-view="timer">
+          <span class="tab-icon">⏱️</span> 專注碼表
+          <span id="timerBadge" class="timer-live-badge hidden"></span>
+        </button>
+        <button class="nav-tab" data-view="logs">
+          <span class="tab-icon">📖</span> 閱讀與紀錄
+        </button>
+        <button class="nav-tab" data-view="manage">
+          <span class="tab-icon">⚙️</span> 習慣管理
+        </button>
+      </nav>
+
+      <div class="header-tools">
+        <button id="themeToggleBtn" class="icon-btn" title="切換深淺色主題" aria-label="Toggle Theme">
+          <span id="themeIcon">☀️</span>
+        </button>
+        <button id="backupModalBtn" class="icon-btn" title="資料備份與還原" aria-label="Backup & Restore">
+          <span>💾</span>
+        </button>
+        <button id="addHabitBtn" class="btn btn-primary btn-sm">
+          <span>➕</span> 新增習慣
+        </button>
+      </div>
+    </header>
+
+    <!-- 主內容區 -->
+    <main class="main-content">
+
+      <!-- ============================================== -->
+      <!-- VIEW 1: 週打卡看板 (BOARD) -->
+      <!-- ============================================== -->
+      <section id="viewBoard" class="view-section active">
+        <!-- 週次導覽列與數據總覽 -->
+        <div class="board-topbar">
+          <div class="week-navigator">
+            <button id="prevWeekBtn" class="nav-arrow-btn" title="上一週">◀</button>
+            <div class="week-display">
+              <span id="weekTitle" class="week-title">載入中...</span>
+              <span id="weekRange" class="week-range">2026/10/04 ~ 2026/10/10</span>
+            </div>
+            <button id="nextWeekBtn" class="nav-arrow-btn" title="下一週">▶</button>
+            <button id="todayBtn" class="btn btn-outline btn-sm">回到本週</button>
+          </div>
+
+          <div class="week-summary-cards">
+            <div class="summary-card">
+              <div class="summary-label">本週總達成率</div>
+              <div class="summary-value" id="overallRate">0%</div>
+              <div class="progress-track">
+                <div class="progress-bar" id="overallProgressBar" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">完成次數 / 目標</div>
+              <div class="summary-value" id="overallCount">0 / 0</div>
+              <div class="summary-sub" id="achievedHabitsCount">已達成 0 個習慣</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">本週閱讀專注時長</div>
+              <div class="summary-value text-accent" id="weekFocusTime">0h 0m</div>
+              <div class="summary-sub" id="weekSessionCount">共 0 次計時</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 習慣打卡網格表格 -->
+        <div class="table-container">
+          <div class="table-card">
+            <table class="habit-table">
+              <thead>
+                <tr>
+                  <th class="col-habit">習慣項目</th>
+                  <th class="col-target">目標</th>
+                  <th class="col-progress">進度</th>
+                  <th class="col-day" data-day="0">
+                    <span class="day-name">週日</span>
+                    <span class="day-date" id="dateHeader0">-</span>
+                  </th>
+                  <th class="col-day" data-day="1">
+                    <span class="day-name">週一</span>
+                    <span class="day-date" id="dateHeader1">-</span>
+                  </th>
+                  <th class="col-day" data-day="2">
+                    <span class="day-name">週二</span>
+                    <span class="day-date" id="dateHeader2">-</span>
+                  </th>
+                  <th class="col-day" data-day="3">
+                    <span class="day-name">週三</span>
+                    <span class="day-date" id="dateHeader3">-</span>
+                  </th>
+                  <th class="col-day" data-day="4">
+                    <span class="day-name">週四</span>
+                    <span class="day-date" id="dateHeader4">-</span>
+                  </th>
+                  <th class="col-day" data-day="5">
+                    <span class="day-name">週五</span>
+                    <span class="day-date" id="dateHeader5">-</span>
+                  </th>
+                  <th class="col-day" data-day="6">
+                    <span class="day-name">週六</span>
+                    <span class="day-date" id="dateHeader6">-</span>
+                  </th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody id="habitTableBody">
+                <!-- 動態注入打卡清單項目 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 每日生活亮點隨筆區 (Daily Highlights，對應原試算表第58-59行的值得記錄事項) -->
+        <div class="daily-notes-section">
+          <div class="section-header">
+            <div class="section-title-wrap">
+              <span class="section-icon">📝</span>
+              <h3>每日生活亮點 & 值得記錄的事</h3>
+            </div>
+            <p class="section-desc">記錄每天精彩、有趣或值得紀念的小故事（點擊格內即可編輯，自動即時保存）</p>
+          </div>
+          <div class="daily-notes-grid" id="dailyNotesGrid">
+            <!-- 動態注入 7 天的每日小卡 -->
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ============================================== -->
+      <!-- VIEW 2: 專注碼表 (TIMER) -->
+      <!-- ============================================== -->
+      <section id="viewTimer" class="view-section">
+        <div class="timer-view-wrapper">
+          <div class="timer-main-card">
+            <div class="timer-header">
+              <h2>⏱️ 專注碼表</h2>
+              <p>看書、研讀、AI對話或專業學習時啟動計時，結束可一鍵結算並同步今日打卡</p>
+            </div>
+
+            <!-- 選擇習慣與主題/書名 -->
+            <div class="timer-config-panel">
+              <div class="form-group">
+                <label for="timerHabitSelect">選擇習慣項目</label>
+                <select id="timerHabitSelect" class="form-control form-select">
+                  <!-- 動態注入習慣選項 -->
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="timerSubjectInput">看哪本書 / 研讀主題 / 備註</label>
+                <div class="subject-input-wrapper">
+                  <input type="text" id="timerSubjectInput" class="form-control" placeholder="例如：《原子習慣》、專利法第56條、BBC新聞研讀..." />
+                </div>
+                <!-- 常用書名快捷標籤 -->
+                <div class="quick-tags" id="recentSubjectsTags">
+                  <!-- 動態注入歷史書名快捷標籤 -->
+                </div>
+              </div>
+            </div>
+
+            <!-- 大碼表顯示器 -->
+            <div class="timer-display-box" id="timerDisplayBox">
+              <div class="timer-numbers" id="timerDigits">00:00:00</div>
+              <div class="timer-status-badge" id="timerStatusBadge">準備就緒</div>
+            </div>
+
+            <!-- 控制按鈕組 -->
+            <div class="timer-controls">
+              <button id="timerStartBtn" class="btn btn-primary btn-lg">
+                <span class="btn-icon">▶</span> 開始計時
+              </button>
+              <button id="timerPauseBtn" class="btn btn-warning btn-lg hidden">
+                <span class="btn-icon">⏸</span> 暫停計時
+              </button>
+              <button id="timerResumeBtn" class="btn btn-primary btn-lg hidden">
+                <span class="btn-icon">⏯</span> 繼續計時
+              </button>
+              <button id="timerSettleBtn" class="btn btn-success btn-lg" disabled>
+                <span class="btn-icon">🏁</span> 結束結算
+              </button>
+              <button id="timerResetBtn" class="btn btn-outline btn-lg" disabled>
+                <span class="btn-icon">🔄</span> 重設
+              </button>
+            </div>
+          </div>
+
+          <!-- 右側/下方：今日即時專注紀錄 -->
+          <div class="timer-side-card">
+            <div class="side-header">
+              <h3>📅 今日專注紀錄</h3>
+              <span id="todayTotalTimeBadge" class="badge badge-accent">今日總計 0m</span>
+            </div>
+            <div class="today-sessions-list" id="todaySessionsList">
+              <!-- 動態注入今天完成的計時清單 -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ============================================== -->
+      <!-- VIEW 3: 閱讀與專注歷程 (LOGS) -->
+      <!-- ============================================== -->
+      <section id="viewLogs" class="view-section">
+        <div class="logs-header">
+          <div>
+            <h2>📖 閱讀與專注歷程紀錄</h2>
+            <p>每次閱讀與學習的結算清單、累計時數與心得摘要</p>
+          </div>
+          <div class="logs-filter-group">
+            <input type="text" id="logSearchInput" class="form-control form-control-sm" placeholder="🔍 搜尋書名、主題或心得..." />
+            <select id="logHabitFilter" class="form-control form-select form-control-sm">
+              <option value="ALL">全部習慣</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 統計卡片列 -->
+        <div class="logs-stats-row">
+          <div class="stat-box">
+            <span class="stat-box-title">累計總專注時長</span>
+            <strong class="stat-box-number" id="totalFocusTimeStat">0 小時</strong>
+          </div>
+          <div class="stat-box">
+            <span class="stat-box-title">總計結算次數</span>
+            <strong class="stat-box-number" id="totalSessionCountStat">0 次</strong>
+          </div>
+          <div class="stat-box">
+            <span class="stat-box-title">閱讀書籍與主題</span>
+            <strong class="stat-box-number" id="totalUniqueBooksStat">0 本</strong>
+          </div>
+        </div>
+
+        <!-- 歷程表格/卡片 -->
+        <div class="logs-container">
+          <div class="logs-list-card">
+            <div class="logs-list" id="sessionLogsList">
+              <!-- 動態注入歷史結算紀錄 -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ============================================== -->
+      <!-- VIEW 4: 習慣庫管理 (MANAGE) -->
+      <!-- ============================================== -->
+      <section id="viewManage" class="view-section">
+        <div class="manage-header">
+          <div>
+            <h2>⚙️ 習慣清單與目標管理</h2>
+            <p>自由自訂、新增、修改每週目標，或將習慣設為暫時休息</p>
+          </div>
+          <button id="manageAddBtn" class="btn btn-primary">
+            <span>➕</span> 新增自訂習慣
+          </button>
+        </div>
+
+        <div class="manage-grid">
+          <!-- 進行中的習慣 -->
+          <div class="manage-column">
+            <div class="manage-col-header">
+              <h3>🌱 正在養成的習慣 (<span id="activeHabitCount">0</span>)</h3>
+            </div>
+            <div class="habit-cards-list" id="activeHabitsList">
+              <!-- 動態注入進行中習慣卡片 -->
+            </div>
+          </div>
+
+          <!-- 暫時休息的習慣 (對應試算表中的「暫時休息」) -->
+          <div class="manage-column">
+            <div class="manage-col-header">
+              <h3>⏸️ 暫時休息 / 封存中 (<span id="pausedHabitCount">0</span>)</h3>
+            </div>
+            <div class="habit-cards-list" id="pausedHabitsList">
+              <!-- 動態注入暫時休息的習慣卡片 -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+
+  <!-- ============================================== -->
+  <!-- MODALS (彈出對話窗) -->
+  <!-- ============================================== -->
+
+  <!-- 1. 碼表結算確認對話窗 -->
+  <div id="settleModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon">🎉</span>
+          <h3>結算本次專注成果</h3>
+        </div>
+        <button class="modal-close-btn" data-close="settleModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settle-highlight-box">
+          <div class="settle-duration-label">本次專注投入時間</div>
+          <div class="settle-duration-val" id="settleDurationDisplay">00:45:00</div>
+          <div class="settle-time-span" id="settleTimeSpanDisplay">18:00 ~ 18:45</div>
+        </div>
+
+        <form id="settleForm">
+          <div class="form-group">
+            <label>習慣項目</label>
+            <input type="text" id="settleHabitName" class="form-control" readonly />
+          </div>
+
+          <div class="form-group">
+            <label for="settleSubject">看哪本書 / 主題 / 章節</label>
+            <input type="text" id="settleSubject" class="form-control" placeholder="例如：《專利法實務》第4章、原子習慣..." required />
+          </div>
+
+          <div class="form-group">
+            <label for="settleNotes">心得筆記或摘要 (選填)</label>
+            <textarea id="settleNotes" class="form-control form-textarea" rows="3" placeholder="寫下一點收穫、重要概念或想記下的靈感..."></textarea>
+          </div>
+
+          <div class="form-group check-option">
+            <label class="checkbox-container">
+              <input type="checkbox" id="settleSyncCheck" checked />
+              <span class="checkmark"></span>
+              <span class="checkbox-label">同步將今天該習慣打卡次數 +1</span>
+            </label>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline" data-close="settleModal">取消</button>
+            <button type="submit" class="btn btn-success">✅ 確認儲存並結算</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 2. 新增 / 編輯習慣對話窗 -->
+  <div id="habitModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon" id="habitModalIcon">✨</span>
+          <h3 id="habitModalTitle">新增自訂習慣</h3>
+        </div>
+        <button class="modal-close-btn" data-close="habitModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="habitForm">
+          <input type="hidden" id="habitFormId" value="" />
+
+          <div class="form-group">
+            <label for="habitFormEmoji">Emoji 圖示</label>
+            <div class="emoji-picker-row">
+              <input type="text" id="habitFormEmoji" class="form-control emoji-input" value="📖" maxlength="4" required />
+              <div class="emoji-presets">
+                <button type="button" class="emoji-chip" data-emoji="📖">📖</button>
+                <button type="button" class="emoji-chip" data-emoji="🔠">🔠</button>
+                <button type="button" class="emoji-chip" data-emoji="🔡">🔡</button>
+                <button type="button" class="emoji-chip" data-emoji="🔤">🔤</button>
+                <button type="button" class="emoji-chip" data-emoji="⚖️">⚖️</button>
+                <button type="button" class="emoji-chip" data-emoji="🛵">🛵</button>
+                <button type="button" class="emoji-chip" data-emoji="💡">💡</button>
+                <button type="button" class="emoji-chip" data-emoji="🍵">🍵</button>
+                <button type="button" class="emoji-chip" data-emoji="⛩️">⛩️</button>
+                <button type="button" class="emoji-chip" data-emoji="✍️">✍️</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="habitFormName">習慣名稱</label>
+            <input type="text" id="habitFormName" class="form-control" placeholder="例如：看書 or 聽書 or podcast筆記" required />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="habitFormTarget">每週目標次數 (次/週)</label>
+              <input type="number" id="habitFormTarget" class="form-control" min="1" max="7" value="3" required />
+            </div>
+
+            <div class="form-group col-6">
+              <label for="habitFormCategory">分類</label>
+              <select id="habitFormCategory" class="form-control form-select">
+                <option value="閱讀吸收">閱讀吸收</option>
+                <option value="語言學習">語言學習</option>
+                <option value="專業研習">專業研習</option>
+                <option value="生活日常">生活日常</option>
+                <option value="自我成長">自我成長</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group check-option">
+            <label class="checkbox-container">
+              <input type="checkbox" id="habitFormTimerEnabled" checked />
+              <span class="checkmark"></span>
+              <span class="checkbox-label">支援碼表專注計時（在打卡欄與碼表選單中提供計時捷徑）</span>
+            </label>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline" data-close="habitModal">取消</button>
+            <button type="submit" class="btn btn-primary" id="habitFormSubmitBtn">儲存習慣</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 3. 備份與匯出入 / 還原預設對話窗 -->
+  <div id="backupModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon">💾</span>
+          <h3>資料備份、匯出與還原</h3>
+        </div>
+        <button class="modal-close-btn" data-close="backupModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          所有打卡與碼表數據均妥善保存在此瀏覽器的 LocalStorage 中，您可以隨時匯出 JSON 備份檔保存或同步到其他裝置。
+        </p>
+
+        <div class="backup-action-grid">
+          <div class="backup-action-card">
+            <h4>📥 匯出資料備份</h4>
+            <p>將習慣清單、打卡歷史與計時紀錄下載為 JSON 檔案。</p>
+            <button id="exportJsonBtn" class="btn btn-outline btn-sm">下載 JSON 備份</button>
+          </div>
+
+          <div class="backup-action-card">
+            <h4>📤 匯入備份檔案</h4>
+            <p>上傳先前的備份檔案並還原打卡紀錄。</p>
+            <input type="file" id="importJsonInput" accept=".json" class="hidden" />
+            <button id="triggerImportBtn" class="btn btn-outline btn-sm">選擇 JSON 匯入</button>
+          </div>
+
+          <div class="backup-action-card card-warning">
+            <h4>🔄 還原試算表預設習慣</h4>
+            <p>重設回您的 Google 試算表關鍵打卡習慣（已過濾運動項目）。</p>
+            <button id="resetDefaultsBtn" class="btn btn-warning btn-sm">還原試算表預設</button>
+          </div>
+        </div>
+
+        <div class="github-guide-card">
+          <h4>🚀 如何放上 GitHub 與開啟 GitHub Pages？</h4>
+          <ol>
+            <li>在 GitHub 建立一個新儲存庫（如 <code>habit-tracker</code>）。</li>
+            <li>將本專案目錄中的檔案上傳至儲存庫根目錄。</li>
+            <li>到儲存庫的 <strong>Settings ➔ Pages</strong>，將 Branch 設為 <code>main</code> 並儲存。</li>
+            <li>數分鐘後即可獲得專屬網址，手機與電腦隨時打卡！詳細步驟請見 <code>README.md</code>。</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示訊息 -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- 載入應用程式核心 JS -->
+  <script src="app.js"></script>
+</body>
+</html>

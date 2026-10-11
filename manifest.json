@@ -1,0 +1,16 @@
+{
+  "name": "關鍵行動週打卡",
+  "short_name": "FocusHabit",
+  "description": "自主學習、閱讀專注與習慣養成週打卡 App",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
